@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/card_provider.dart';
 import '../widgets/credit_card_widget.dart';
+import '../services/backup_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = "";
   String? _selectedBank;
+  bool _isSyncing = false;
 
   String _getAbbreviatedBank(String bank) {
     String name = bank.toUpperCase();
@@ -53,19 +55,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return Colors.blueGrey.shade700;
   }
 
+  Future<void> _handleSync() async {
+    setState(() => _isSyncing = true);
+    try {
+      await BackupService().onlineBackup();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Cloud Sync Complete"), duration: Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Sync failed: ${e.toString()}")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
       body: Container(
         decoration: BoxDecoration(
           gradient: RadialGradient(
             center: const Alignment(-0.8, -0.6),
             radius: 1.2,
-            colors: [
-              const Color(0xFF1E293B).withOpacity(0.5),
-              const Color(0xFF020617),
-            ],
+            colors: isDark 
+              ? [const Color(0xFF1E293B).withOpacity(0.5), const Color(0xFF020617)]
+              : [Colors.blue.shade50, Colors.white],
           ),
         ),
         child: SafeArea(
@@ -94,25 +116,46 @@ class _HomeScreenState extends State<HomeScreen> {
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverAppBar(
-                    backgroundColor: const Color(0xFF020617),
+                    backgroundColor: Colors.transparent,
                     elevation: 0,
-                    pinned: true,
+                    pinned: false,
+                    floating: true,
+                    snap: true,
                     centerTitle: false,
-                    title: Text(
-                      "Card Vault",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
+                    title: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Card Vault",
+                          style: GoogleFonts.poppins(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: _isSyncing ? null : _handleSync,
+                          child: AnimatedRotation(
+                            duration: const Duration(seconds: 1),
+                            turns: _isSyncing ? 1 : 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _isSyncing ? Icons.sync : Icons.cloud_done_rounded,
+                                color: Colors.blueAccent,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      IconButton(
-                        onPressed: () => context.read<CardProvider>().refreshCards(),
-                        icon: const Icon(Icons.refresh, color: Colors.blue, size: 20),
-                      ),
-                    ],
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
@@ -123,13 +166,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 10),
                           TextField(
                             onChanged: (v) => setState(() => _searchQuery = v),
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(color: isDark ? Colors.white : Colors.black),
                             decoration: InputDecoration(
                               hintText: "Search cards...",
-                              hintStyle: const TextStyle(color: Colors.white24),
-                              prefixIcon: const Icon(Icons.search, color: Colors.white24, size: 20),
+                              hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black26),
+                              prefixIcon: Icon(Icons.search, color: isDark ? Colors.white24 : Colors.black26, size: 20),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.03),
+                              fillColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
                             ),
                           ),
@@ -137,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           
                           if (bankCounts.isNotEmpty)
                             SizedBox(
-                              height: 40, // Reduced height for smarter look
+                              height: 40,
                               child: ListView(
                                 scrollDirection: Axis.horizontal,
                                 physics: const BouncingScrollPhysics(),
@@ -165,15 +208,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                           Text(
                                             e.key,
                                             style: GoogleFonts.poppins(
-                                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.7), 
-                                              fontSize: 12, // Smarter font size
+                                              color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black54), 
+                                              fontSize: 12,
                                               fontWeight: FontWeight.bold,
                                               letterSpacing: 0.5
                                             ),
                                           ),
                                           const SizedBox(width: 10),
                                           Container(
-                                            width: 30, // Smarter circle size
+                                            width: 30,
                                             height: 30,
                                             decoration: BoxDecoration(
                                               color: Colors.black.withOpacity(0.2),
@@ -183,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               child: Text(
                                                 e.value.toString(),
                                                 style: TextStyle(
-                                                  color: isSelected ? Colors.white : Colors.white.withOpacity(0.5), 
+                                                  color: isSelected ? Colors.white : (isDark ? Colors.white54 : Colors.black38), 
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.bold
                                                 ),
@@ -205,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               Text(
                                 _selectedBank == null ? "ACTIVE CARDS" : "$_selectedBank COLLECTION",
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white38, 
+                                  color: isDark ? Colors.white38 : Colors.black38, 
                                   fontSize: 11, 
                                   fontWeight: FontWeight.bold, 
                                   letterSpacing: 1.5
@@ -225,8 +268,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   
                   if (filteredCards.isEmpty)
-                    const SliverFillRemaining(
-                      child: Center(child: Text("No cards in vault", style: TextStyle(color: Colors.white24))),
+                    SliverFillRemaining(
+                      child: Center(child: Text("No cards in vault", style: TextStyle(color: isDark ? Colors.white24 : Colors.black26))),
                     )
                   else
                     SliverPadding(

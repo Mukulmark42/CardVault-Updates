@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/card_provider.dart';
 import '../models/card_model.dart';
 import '../widgets/credit_card_widget.dart';
@@ -16,9 +17,10 @@ class _VaultScreenState extends State<VaultScreen> {
   String _searchQuery = "";
 
   void showOptions(CardModel card) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: isDark ? const Color(0xFF020617) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -30,7 +32,7 @@ class _VaultScreenState extends State<VaultScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.add_shopping_cart, color: Colors.green),
-                title: const Text("Update Spent Amount", style: TextStyle(color: Colors.white)),
+                title: Text("Update Spent Amount", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   showUpdateSpentDialog(card);
@@ -38,7 +40,7 @@ class _VaultScreenState extends State<VaultScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.edit, color: Colors.blue),
-                title: const Text("Edit Card Details", style: TextStyle(color: Colors.white)),
+                title: Text("Edit Card Details", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   await Navigator.push(
@@ -49,7 +51,7 @@ class _VaultScreenState extends State<VaultScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text("Delete Card", style: TextStyle(color: Colors.white)),
+                title: Text("Delete Card", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   _confirmDeletion(card);
@@ -67,9 +69,8 @@ class _VaultScreenState extends State<VaultScreen> {
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        title: const Text("Delete Card", style: TextStyle(color: Colors.white)),
-        content: const Text("Are you sure you want to delete this card?", style: TextStyle(color: Colors.white70)),
+        title: const Text("Delete Card"),
+        content: const Text("Are you sure you want to delete this card?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text("Cancel")),
           TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
@@ -90,16 +91,13 @@ class _VaultScreenState extends State<VaultScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        title: const Text("Update Spending", style: TextStyle(color: Colors.white)),
+        title: const Text("Update Spending"),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
           decoration: const InputDecoration(
             labelText: "Total Spent Amount",
-            labelStyle: TextStyle(color: Colors.white60),
           ),
         ),
         actions: [
@@ -122,74 +120,109 @@ class _VaultScreenState extends State<VaultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF020617),
-      appBar: AppBar(
-        title: const Text("Virtual Vault", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddCardScreen())),
-      ),
-      body: Consumer<CardProvider>(
-        builder: (context, provider, child) {
-          final filteredCards = provider.cards.where((card) {
-            final query = _searchQuery.toLowerCase();
-            return card.bank.toLowerCase().contains(query) || 
-                   card.holder.toLowerCase().contains(query) ||
-                   card.variant.toLowerCase().contains(query);
-          }).toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: "Search vault...",
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                    filled: true,
-                    fillColor: Colors.white.withAlpha(13),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(0.8, -0.6),
+            radius: 1.2,
+            colors: isDark 
+              ? [const Color(0xFF1E293B).withOpacity(0.5), const Color(0xFF020617)]
+              : [Colors.blue.shade50, Colors.white],
+          ),
+        ),
+        child: SafeArea(
+          child: Consumer<CardProvider>(
+            builder: (context, provider, child) {
+              final filteredCards = provider.cards.where((card) {
+                final query = _searchQuery.toLowerCase();
+                return card.bank.toLowerCase().contains(query) || 
+                       card.holder.toLowerCase().contains(query) ||
+                       card.variant.toLowerCase().contains(query);
+              }).toList();
+
+              return CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverAppBar(
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    pinned: false,
+                    floating: true,
+                    snap: true,
+                    title: Text(
+                      "Virtual Vault",
+                      style: GoogleFonts.poppins(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.bold
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: filteredCards.isEmpty
-                    ? const Center(child: Text("No cards found", style: TextStyle(color: Colors.white24)))
-                    : ListView.builder(
-                        itemCount: filteredCards.length,
-                        cacheExtent: 500,
-                        padding: const EdgeInsets.only(bottom: 80),
-                        itemBuilder: (context, index) {
-                          final card = filteredCards[index];
-                          return RepaintBoundary(
-                            key: ValueKey('vault_${card.id}'),
-                            child: GestureDetector(
-                              onTap: () => showOptions(card),
-                              child: CreditCardWidget(
-                                card: card,
-                                showControls: false,
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          TextField(
+                            onChanged: (v) => setState(() => _searchQuery = v),
+                            style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                            decoration: InputDecoration(
+                              hintText: "Search vault...",
+                              hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black26),
+                              prefixIcon: Icon(Icons.search, color: isDark ? Colors.white38 : Colors.black26),
+                              filled: true,
+                              fillColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide.none,
                               ),
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                       ),
-                ),
-              ],
-            ),
-          );
-        },
+                    ),
+                  ),
+                  if (filteredCards.isEmpty)
+                    SliverFillRemaining(
+                      child: Center(child: Text("No cards found", style: TextStyle(color: isDark ? Colors.white24 : Colors.black26))),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final card = filteredCards[index];
+                            return RepaintBoundary(
+                              key: ValueKey('vault_${card.id}'),
+                              child: GestureDetector(
+                                onTap: () => showOptions(card),
+                                child: CreditCardWidget(
+                                  card: card,
+                                  showControls: false,
+                                ),
+                              ),
+                            );
+                          },
+                          childCount: filteredCards.length,
+                        ),
+                      ),
+                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.deepPurpleAccent,
+        child: const Icon(Icons.add, color: Colors.white),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddCardScreen())),
       ),
     );
   }

@@ -1,143 +1,250 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
-import 'dart:convert';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/card_provider.dart';
-import '../database/database_helper.dart';
-import '../models/card_model.dart';
+import '../providers/theme_provider.dart';
+import '../services/auth_service.dart';
+import '../services/backup_service.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
-  void _clearAllData(BuildContext context) async {
-    bool? confirm = await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        title: const Text("Clear All Data"),
-        content: const Text("This will permanently delete all your cards. This action cannot be undone."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete Everything", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
 
-    if (confirm == true) {
-      final provider = Provider.of<CardProvider>(context, listen: false);
-      for (var card in provider.cards) {
-        await DatabaseHelper.instance.deleteCard(card.id!);
-      }
-      provider.refreshCards();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All data cleared")));
+class _SettingsScreenState extends State<SettingsScreen> {
+  final BackupService _backupService = BackupService();
+  bool _isProcessing = false;
+  String _processMessage = "Syncing with Vault...";
+
+  void _handleLogout(BuildContext context) async {
+    setState(() {
+      _isProcessing = true;
+      _processMessage = "Signing out securely...";
+    });
+
+    // 1. Artificial delay for the "few seconds" loading circle
+    await Future.delayed(const Duration(seconds: 2));
+
+    // 2. Perform logout
+    final authService = Provider.of<AuthService>(context, listen: false);
+    await authService.signOut();
+
+    if (mounted) {
+      setState(() => _isProcessing = false);
+      // 3. Clear all navigation routes to return to the root (main.dart home)
+      // The StreamBuilder in main.dart will then automatically show the LoginScreen
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 
-  void _exportData(BuildContext context) async {
-    final provider = Provider.of<CardProvider>(context, listen: false);
-    if (provider.cards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No data to export")));
-      return;
-    }
-
+  Future<void> _runBackupRestore(Future<void> Function() action, String successMessage) async {
+    setState(() {
+      _isProcessing = true;
+      _processMessage = "Syncing with Vault...";
+    });
     try {
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/cardvault_backup.json');
-      
-      final data = provider.cards.map((c) => c.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
-
-      await Share.shareXFiles([XFile(file.path)], text: 'My CardVault Backup');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Export failed")));
-    }
-  }
-
-  void _importData(BuildContext context) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (result != null) {
-        File file = File(result.files.single.path!);
-        String content = await file.readAsString();
-        List<dynamic> data = jsonDecode(content);
-
-        final provider = Provider.of<CardProvider>(context, listen: false);
-        
-        int importedCount = 0;
-        for (var cardMap in data) {
-          // Remove ID to avoid conflicts, let DB generate new IDs
-          final map = Map<String, dynamic>.from(cardMap);
-          map.remove('id');
-          await provider.addCard(CardModel.fromMap(map));
-          importedCount++;
-        }
-
+      await action();
+      if (mounted) {
+        context.read<CardProvider>().refreshCards();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Successfully imported $importedCount cards")),
+          SnackBar(
+            content: Text(successMessage),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.green.shade800,
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Import failed. Ensure the file is a valid CardVault backup.")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Action failed: ${e.toString()}"),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<AuthService>(context).currentUser;
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.themeMode == ThemeMode.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
-        title: const Text("Settings"),
+        title: Text("Settings", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
       ),
-      body: ListView(
+      body: Stack(
         children: [
-          _buildSectionHeader("Security & Data"),
-          ListTile(
-            leading: const Icon(Icons.download, color: Colors.blue),
-            title: const Text("Export Backup"),
-            subtitle: const Text("Save your data to a file"),
-            onTap: () => _exportData(context),
+          ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              const SizedBox(height: 10),
+              // User Profile Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark 
+                      ? [Colors.deepPurple.shade900.withOpacity(0.5), Colors.blue.shade900.withOpacity(0.3)]
+                      : [Colors.deepPurple.shade100, Colors.blue.shade50],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: Colors.deepPurpleAccent,
+                      child: Text(
+                        user?.email?.substring(0, 1).toUpperCase() ?? "U",
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.email ?? "Guest User",
+                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Text(
+                            "Pro Account • Cloud Sync Active",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                      onPressed: () => _handleLogout(context),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              _buildSectionHeader("APPEARANCE"),
+              _buildSettingItem(
+                context: context,
+                icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                color: isDark ? Colors.orangeAccent : Colors.amber,
+                title: "Dark Mode",
+                subtitle: isDark ? "Current: Dark" : "Current: Light",
+                trailing: Switch(
+                  value: isDark, 
+                  onChanged: (v) => themeProvider.toggleTheme(v), 
+                  activeColor: Colors.deepPurpleAccent
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              _buildSectionHeader("CLOUD SYNC"),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.cloud_upload_outlined,
+                color: Colors.blueAccent,
+                title: "Manual Backup",
+                subtitle: "Push local cards to Firebase",
+                onTap: () => _runBackupRestore(_backupService.onlineBackup, "Cloud backup successful"),
+              ),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.cloud_download_outlined,
+                color: Colors.greenAccent,
+                title: "Cloud Restore",
+                subtitle: "Sync data from your account",
+                onTap: () => _runBackupRestore(_backupService.onlineRestore, "Cloud restore successful"),
+              ),
+              
+              const SizedBox(height: 16),
+              _buildSectionHeader("LOCAL BACKUP"),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.ios_share_rounded,
+                color: Colors.orangeAccent,
+                title: "Export JSON",
+                subtitle: "Share encrypted backup file",
+                onTap: () => _runBackupRestore(_backupService.offlineBackup, "Backup file shared"),
+              ),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.file_present_rounded,
+                color: Colors.tealAccent,
+                title: "Import JSON",
+                subtitle: "Restore from a shared file",
+                onTap: () => _runBackupRestore(_backupService.offlineRestore, "Local restore successful"),
+              ),
+
+              const SizedBox(height: 16),
+              _buildSectionHeader("SECURITY"),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.fingerprint_rounded,
+                color: Colors.purpleAccent,
+                title: "Biometric Lock",
+                subtitle: "Require fingerprint on start",
+                trailing: Switch(value: true, onChanged: (v) {}, activeColor: Colors.deepPurpleAccent),
+              ),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.delete_forever_rounded,
+                color: Colors.redAccent,
+                title: "Wipe Local Data",
+                subtitle: "Delete all cards from this device",
+                onTap: () async {
+                  bool? confirm = await showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      title: const Text("Confirm Wipe"),
+                      content: const Text("This will delete all cards from local storage. Cloud data is safe."),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text("Wipe Everything", style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await context.read<CardProvider>().clearAllCards();
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Local data cleared")));
+                  }
+                },
+              ),
+              const SizedBox(height: 40),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.upload, color: Colors.green),
-            title: const Text("Import Backup"),
-            subtitle: const Text("Restore data from a file"),
-            onTap: () => _importData(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text("Clear All Data"),
-            subtitle: const Text("Permanently delete all cards"),
-            onTap: () => _clearAllData(context),
-          ),
-          const Divider(color: Colors.white10),
-          _buildSectionHeader("Appearance"),
-          const ListTile(
-            leading: Icon(Icons.dark_mode, color: Colors.purple),
-            title: Text("Dark Mode"),
-            subtitle: Text("Currently always on"),
-            trailing: Icon(Icons.check_circle, color: Colors.green, size: 20),
-          ),
-          const Divider(color: Colors.white10),
-          _buildSectionHeader("About"),
-          const ListTile(
-            leading: Icon(Icons.info_outline, color: Colors.white60),
-            title: Text("CardVault v1.0.0"),
-            subtitle: Text("Built with Security in Mind"),
-          ),
+          if (_isProcessing)
+            Container(
+              color: Colors.black87,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.deepPurpleAccent),
+                    const SizedBox(height: 20),
+                    Text(_processMessage, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -145,10 +252,45 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      padding: const EdgeInsets.only(left: 8, bottom: 12),
       child: Text(
         title,
-        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1),
+        style: GoogleFonts.poppins(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildSettingItem({
+    required BuildContext context,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    VoidCallback? onTap,
+    Widget? trailing,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: trailing ?? Icon(Icons.chevron_right_rounded, color: isDark ? Colors.white12 : Colors.black12),
       ),
     );
   }

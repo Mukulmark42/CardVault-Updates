@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "570240799272",
+    "firebase_url": "https://cardvault-77f33-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "cardvault-77f33",
+    "storage_bucket": "cardvault-77f33.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:570240799272:android:eec7c6fc3c286b49dd5b1d",
+        "android_client_info": {
+          "package_name": "com.example.cardvault"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "570240799272-c32gfjopm5mllmtba1sa27nru9qjqb7k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cardvault",
+            "certificate_hash": "b3f7724d346cda3638c38c6c4ff19e3134d9541c"
+          }
+        },
+        {
+          "client_id": "570240799272-rqor298og17tegpvlblinnipta58gvqe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtKyEenZk9ojG5IjbEud4D0MwZ2GljjWc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "570240799272-rqor298og17tegpvlblinnipta58gvqe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

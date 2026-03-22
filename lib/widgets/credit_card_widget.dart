@@ -112,7 +112,7 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
     if (b.contains("hdfc")) return "hdfcbank.com";
     if (b.contains("icici")) return "icicibank.com";
     if (b.contains("indusind")) return "indusind.com";
-    if (b.contains("idfc")) return "idfcfirstbank.com";
+    if (b.contains("idfc")) return "idfcfirst.bank.in";
     if (b.contains("kotak")) return "kotak.com";
     if (b.contains("rbl")) return "rblbank.com";
     if (b.contains("yes")) return "yesbank.in";
@@ -123,7 +123,7 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
     if (b.contains("central bank")) return "centralbankofindia.co.in";
     if (b.contains("indian bank")) return "indianbank.in";
     if (b.contains("pnb") || b.contains("punjab national")) return "pnbindia.in";
-    if (b.contains("sbi") || b.contains("state bank")) return "sbi.co.in";
+    if (b.contains("sbi") || b.contains("state bank")) return "sbicard.com"; // Fixed domain for SBI Card
     if (b.contains("uco")) return "ucobank.com"; 
     if (b.contains("union bank")) return "unionbankofindia.co.in";
 
@@ -224,7 +224,11 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   stops: const [0.0, 0.6, 1.0],
-                  colors: [_bankColors[0], _bankColors[1], _bankColors[1].withBlue(math.min(255, _bankColors[1].blue + 25))],
+                  colors: [
+                    _bankColors[0], 
+                    _bankColors[1], 
+                    _bankColors[1].withBlue(math.min(255, _bankColors[1].blue + 25))
+                  ],
                 ),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 7, offset: const Offset(0, 3.5))],
               ),

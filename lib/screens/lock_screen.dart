@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,10 +28,7 @@ class _LockScreenState extends State<LockScreen> {
 
       if (ok) {
         if (!mounted) return;
-        
-        // Start loading data ONLY after successful authentication
         context.read<CardProvider>().refreshCards();
-
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const MainScreen()),
@@ -44,125 +42,215 @@ class _LockScreenState extends State<LockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: const Color(0xFF0F172A),
       body: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.3),
-            radius: 0.8,
-            colors: [
-              Color(0xFF1E293B),
-              Color(0xFF020617),
-            ],
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.blue.withOpacity(0.1), width: 2),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "Cardvault",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ".secured",
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFF818CF8),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.blue.withOpacity(0.2), width: 2),
+                        Text(
+                          "Identity Verification",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white38,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.blue.withOpacity(0.1),
-                        ),
-                        child: const Icon(Icons.fingerprint, size: 48, color: Colors.blue),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                  Text(
-                    "Card Vault",
-                    style: GoogleFonts.poppins(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1,
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 15),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      "Biometric authentication required to access your digital wallet.",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.white54,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildBadge(Icons.verified_user, "Secure"),
-                      const SizedBox(width: 15),
-                      _buildBadge(Icons.cloud_off, "Offline"),
-                    ],
-                  ),
-                  const SizedBox(height: 50),
-                  TextButton(
-                    onPressed: _authenticate,
-                    child: Text(
-                      "Tap to authenticate",
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        color: Colors.blue,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+                    _StatusBadge(),
+                  ],
+                ),
               ),
-            ),
+              
+              const Spacer(),
+              
+              // Fingerprint Area
+              GestureDetector(
+                onTap: _authenticate,
+                child: Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.03),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.fingerprint_rounded,
+                      size: 70,
+                      color: const Color(0xFF818CF8).withOpacity(0.8),
+                    ),
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 40),
+              
+              // Text Content
+              Text(
+                "Touch to Authenticate",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  "Place your finger on the sensor to unlock your secure vault.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white38,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 40),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 40),
+                child: Divider(color: Colors.white10),
+              ),
+              const SizedBox(height: 30),
+              
+              // PIN Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: InkWell(
+                  onTap: _authenticate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_outline_rounded, size: 18, color: Colors.white70),
+                        const SizedBox(width: 10),
+                        Text(
+                          "Use PIN Instead",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              
+              const Spacer(),
+              
+              // Footer
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(
+                      "Protected by 256-bit AES Encryption.",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white24,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      "Biometric data is stored locally on device.",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white24,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildBadge(IconData icon, String label) {
+class _StatusBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.white10),
+        color: const Color(0xFF064E3B).withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF059669).withOpacity(0.2)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: icon == Icons.verified_user ? Colors.green : Colors.blue),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF10B981),
+              shape: BoxShape.circle,
+            ),
+          ),
           const SizedBox(width: 8),
           Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+            "Cloud Synced",
+            style: GoogleFonts.poppins(
+              color: const Color(0xFF34D399),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

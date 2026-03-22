@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:math' as math;
 import '../models/card_model.dart';
 import '../providers/card_provider.dart';
 
@@ -25,6 +26,7 @@ class _AddCardScreenState extends State<AddCardScreen> {
 
   String _selectedNetwork = "VISA";
   bool _isDuplicate = false;
+  String _lastDetectedBin = "";
   final List<String> networks = ["VISA", "MASTERCARD", "AMEX", "RUPAY"];
 
   final List<String> banks = [
@@ -77,18 +79,113 @@ class _AddCardScreenState extends State<AddCardScreen> {
       limitController.text = widget.card!.creditLimit.toString();
     }
 
-    numberController.addListener(_detectNetworkAndDuplicate);
+    numberController.addListener(_handleNumberChange);
     bankController.addListener(() => setState(() {}));
     variantController.addListener(() => setState(() {}));
     holderController.addListener(() => setState(() {}));
     expiryController.addListener(() => setState(() {}));
   }
 
+  void _handleNumberChange() {
+    _detectNetworkAndDuplicate();
+    _autoDetectBank();
+  }
+
+  void _autoDetectBank() {
+    String raw = numberController.text.replaceAll(' ', '');
+    if (raw.length < 4) {
+      _lastDetectedBin = "";
+      return;
+    }
+
+    // Try 6 digits first for precision, then fallback to 4
+    String currentBin = raw.substring(0, math.min(raw.length, 6));
+    if (currentBin == _lastDetectedBin && raw.length < 6) return;
+
+    String detectedBank = "";
+    String detectedVariant = "";
+
+    // Comprehensive India-focused BIN mapping (Specific 6-digit BINs first)
+    final List<Map<String, dynamic>> detectionRules = [
+      // HDFC Bank
+      {'prefixes': ['431581', '456859'], 'bank': 'HDFC Bank', 'variant': 'HDFC Infinia'},
+      {'prefixes': ['405887', '524315'], 'bank': 'HDFC Bank', 'variant': 'HDFC Millennia'},
+      {'prefixes': ['486232', '424283'], 'bank': 'HDFC Bank', 'variant': 'HDFC Regalia Gold'},
+      {'prefixes': ['369110', '304381'], 'bank': 'HDFC Bank', 'variant': 'HDFC Diners Club Black'},
+      {'prefixes': ['4315', '4568', '4058', '4862', '4242', '4001', '4032', '4412', '4160', '5243', '5477', '5289'], 'bank': 'HDFC Bank'},
+      
+      // ICICI Bank
+      {'prefixes': ['433919', '433920', '433921'], 'bank': 'ICICI Bank', 'variant': 'Amazon Pay ICICI'},
+      {'prefixes': ['472642'], 'bank': 'ICICI Bank', 'variant': 'ICICI Coral'},
+      {'prefixes': ['447746'], 'bank': 'ICICI Bank', 'variant': 'ICICI Sapphiro'},
+      {'prefixes': ['4339', '4726', '4477', '5176', '5546', '4629', '4623', '4055', '4213', '4053'], 'bank': 'ICICI Bank'},
+      
+      // SBI Card
+      {'prefixes': ['459149'], 'bank': 'SBI Card', 'variant': 'SBI Cashback Card'},
+      {'prefixes': ['459246'], 'bank': 'SBI Card', 'variant': 'SBI SimplyCLICK'},
+      {'prefixes': ['4591', '4592', '5432', '5522', '6070', '5021', '4166', '4037', '4256', '4724'], 'bank': 'SBI Card'},
+      
+      // Axis Bank
+      {'prefixes': ['422338'], 'bank': 'Axis Bank', 'variant': 'Axis Magnus'},
+      {'prefixes': ['438587'], 'bank': 'Axis Bank', 'variant': 'Axis Ace'},
+      {'prefixes': ['512540'], 'bank': 'Axis Bank', 'variant': 'Flipkart Axis Bank'},
+      {'prefixes': ['4223', '4385', '5125', '5326', '5245', '4054', '4160', '4623'], 'bank': 'Axis Bank'},
+      
+      // Amex
+      {'prefixes': ['3712'], 'bank': 'American Express (Amex)', 'variant': 'American Express Gold Card'},
+      {'prefixes': ['3711'], 'bank': 'American Express (Amex)', 'variant': 'American Express Platinum Card'},
+      {'prefixes': ['34', '37'], 'bank': 'American Express (Amex)'},
+      
+      // Others
+      {'prefixes': ['4166', '4386', '4413', '5262', '4037'], 'bank': 'Kotak Mahindra Bank'},
+      {'prefixes': ['4835', '4111', '4514', '4213'], 'bank': 'IDFC FIRST Bank'},
+      {'prefixes': ['5245', '5548', '4014', '4835'], 'bank': 'RBL Bank'},
+      {'prefixes': ['5521', '4262', '4451'], 'bank': 'YES Bank'},
+      {'prefixes': ['4413', '5241', '4037'], 'bank': 'AU Small Finance Bank'},
+      {'prefixes': ['4514', '4001', '4005', '4006'], 'bank': 'Federal Bank'},
+      {'prefixes': ['4000', '4001', '4005', '4006', '4514'], 'bank': 'HSBC India'},
+      {'prefixes': ['4037', '4054', '4315', '4514'], 'bank': 'Standard Chartered Bank'},
+      {'prefixes': ['4037', '4315', '4381', '5044', '5245', '5520'], 'bank': 'Bank of Baroda (BOBCARD)'},
+      {'prefixes': ['4037', '4111', '4262', '4315', '4514', '5217', '5241'], 'bank': 'Punjab National Bank (PNB)'},
+      {'prefixes': ['4001', '4037', '4262', '4315', '4514', '5241'], 'bank': 'Canara Bank'},
+      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'Union Bank of India'},
+      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'Indian Bank'},
+      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'IDBI Bank'},
+    ];
+
+    for (var rule in detectionRules) {
+      if ((rule['prefixes'] as List<String>).any((prefix) => raw.startsWith(prefix))) {
+        detectedBank = rule['bank'] as String;
+        detectedVariant = rule['variant'] as String? ?? "";
+        break;
+      }
+    }
+
+    if (detectedBank.isNotEmpty) {
+      _lastDetectedBin = currentBin;
+      
+      // If the user has manually entered a bank that's NOT in our list, we don't overwrite it.
+      // If it IS in our list or empty, we update it.
+      bool isManualCustomBank = bankController.text.isNotEmpty && !banks.contains(bankController.text);
+      
+      if (!isManualCustomBank) {
+        setState(() {
+          if (bankController.text != detectedBank) {
+            bankController.text = detectedBank;
+          }
+          // Auto-fill variant ONLY if it's currently empty
+          if (detectedVariant.isNotEmpty && variantController.text.isEmpty) {
+            variantController.text = detectedVariant;
+          }
+        });
+      }
+    }
+  }
+
   void _detectNetworkAndDuplicate() {
     String rawNumber = numberController.text.replaceAll(' ', '');
     String network = "VISA";
 
-    // 1. Detect Network
     if (rawNumber.isNotEmpty) {
       if (rawNumber.startsWith('4')) {
         network = "VISA";
@@ -107,7 +204,6 @@ class _AddCardScreenState extends State<AddCardScreen> {
       }
     }
 
-    // 2. Detect Duplicate (Only if full number is entered, typically 16 digits, or 15 for AMEX)
     bool isDup = false;
     final int targetLength = (network == "AMEX") ? 15 : 16;
     
@@ -149,23 +245,20 @@ class _AddCardScreenState extends State<AddCardScreen> {
     }
 
     if (_isDuplicate) {
-      _showError("Cannot save: This card number is already in your vault");
+      _showError("Cannot save: Duplicate card number");
       return;
     }
-
-    String rawNumber = numberController.text.replaceAll(' ', '');
-    double cardLimit = double.tryParse(limitController.text) ?? 0;
 
     final card = CardModel(
       id: widget.card?.id,
       bank: bankController.text.trim(),
       variant: variantController.text.trim(),
       network: _selectedNetwork,
-      number: rawNumber,
-      holder: holderController.text.trim(),
+      number: numberController.text.replaceAll(' ', ''),
+      holder: holderController.text.trim().toUpperCase(),
       expiry: expiryController.text.trim(),
       cvv: cvvController.text.trim(),
-      creditLimit: cardLimit,
+      creditLimit: double.tryParse(limitController.text) ?? 0,
       spent: widget.card?.spent ?? 0,
     );
 
@@ -193,10 +286,9 @@ class _AddCardScreenState extends State<AddCardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
-        title: Text(widget.card == null ? "Add Card" : "Edit Card", 
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
+        title: Text(widget.card == null ? "New Card" : "Edit Details", 
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -210,163 +302,121 @@ class _AddCardScreenState extends State<AddCardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 20),
                     
-                    _buildLabel("CARD NUMBER"),
-                    _customTextField(
-                      numberController,
-                      "XXXX XXXX XXXX XXXX",
-                      keyboard: TextInputType.number,
-                      isError: _isDuplicate,
-                      formatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        CardNumberFormatter(),
-                        LengthLimitingTextInputFormatter(19),
-                      ],
-                      suffix: _getNetworkBadge(),
-                    ),
-                    if (_isDuplicate)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, left: 4),
-                        child: Text(
-                          "This card number is already in your vault",
-                          style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w500),
-                        ),
+                    _buildSectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel("CARD NUMBER"),
+                          _customTextField(
+                            numberController,
+                            "0000 0000 0000 0000",
+                            keyboard: TextInputType.number,
+                            isError: _isDuplicate,
+                            formatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              _CardNumberFormatter(),
+                              LengthLimitingTextInputFormatter(19),
+                            ],
+                            suffix: _getNetworkBadge(),
+                          ),
+                          const SizedBox(height: 20),
+                          _buildLabel("BANK NAME"),
+                          Autocomplete<String>(
+                            optionsBuilder: (textValue) => banks.where((b) => b.toLowerCase().contains(textValue.text.toLowerCase())),
+                            onSelected: (val) {
+                              setState(() {
+                                bankController.text = val;
+                              });
+                            },
+                            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
+                              if (bankController.text != ctrl.text && bankController.text.isNotEmpty && ctrl.text.isEmpty) {
+                                 Future.microtask(() => ctrl.text = bankController.text);
+                              }
+                              return _customTextField(
+                                ctrl, "e.g. HDFC Bank", node: node,
+                                onChanged: (val) {
+                                  bankController.text = val;
+                                },
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 16),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    _buildSectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel("VARIANT & HOLDER"),
+                          Autocomplete<String>(
+                            optionsBuilder: (textValue) {
+                              List<String> variants = bankVariants[bankController.text.trim()] ?? [];
+                              if (textValue.text.isEmpty) return variants;
+                              return variants.where((v) => v.toLowerCase().contains(textValue.text.toLowerCase()));
+                            },
+                            onSelected: (val) => setState(() => variantController.text = val),
+                            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
+                              if (variantController.text != ctrl.text && variantController.text.isNotEmpty && ctrl.text.isEmpty) {
+                                Future.microtask(() => ctrl.text = variantController.text);
+                              }
+                              return _customTextField(
+                                ctrl, "e.g. Regalia Gold", node: node,
+                                onChanged: (val) => variantController.text = val,
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _customTextField(holderController, "FULL NAME ON CARD", textCapitalization: TextCapitalization.characters),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildSectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              _buildLabel("BANK NAME"),
-                              Autocomplete<String>(
-                                optionsBuilder: (textValue) => banks.where((b) => b.toLowerCase().contains(textValue.text.toLowerCase())),
-                                onSelected: (val) {
-                                  setState(() {
-                                    bankController.text = val;
-                                    // Automatically set first variant if available
-                                    List<String>? variants = bankVariants[val];
-                                    if (variants != null && variants.isNotEmpty) {
-                                      variantController.text = variants.first;
-                                    } else {
-                                      variantController.clear();
-                                    }
-                                  });
-                                },
-                                fieldViewBuilder: (ctx, ctrl, node, onFixed) {
-                                  if (bankController.text != ctrl.text) {
-                                    Future.microtask(() => ctrl.text = bankController.text);
-                                  }
-                                  return _customTextField(
-                                    ctrl, 
-                                    "Enter Bank Name", 
-                                    node: node,
-                                    onChanged: (val) {
-                                      bankController.text = val;
-                                      // Clear variant if bank name doesn't match a known bank exactly
-                                      if (!banks.contains(val)) {
-                                        variantController.clear();
-                                      }
-                                    },
-                                  );
-                                },
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel("EXPIRY"),
+                                    _customTextField(expiryController, "MM/YY", 
+                                      keyboard: TextInputType.number,
+                                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4), _ExpiryDateFormatter()]
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel("CVV"),
+                                    _customTextField(cvvController, "•••", 
+                                      keyboard: TextInputType.number, obscureText: true,
+                                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)]
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    _buildLabel("CARD VARIANT (OPTIONAL)"),
-                    Autocomplete<String>(
-                      optionsBuilder: (textValue) {
-                        List<String> variants = bankVariants[bankController.text.trim()] ?? [];
-                        if (textValue.text.isEmpty) return variants;
-                        return variants.where((v) => v.toLowerCase().contains(textValue.text.toLowerCase()));
-                      },
-                      onSelected: (val) => variantController.text = val,
-                      fieldViewBuilder: (ctx, ctrl, node, onFixed) {
-                        if (variantController.text != ctrl.text) {
-                          Future.microtask(() => ctrl.text = variantController.text);
-                        }
-                        return _customTextField(
-                          ctrl, 
-                          "e.g. Amazon Pay, Regalia...", 
-                          node: node,
-                          onChanged: (val) => variantController.text = val,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 20),
-
-                    _buildLabel("CARD HOLDER"),
-                    _customTextField(holderController, "FULL NAME", textCapitalization: TextCapitalization.characters),
-                    const SizedBox(height: 20),
-
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildLabel("EXPIRY"),
-                              _customTextField(
-                                expiryController, 
-                                "MM/YY", 
-                                keyboard: TextInputType.number,
-                                formatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                  ExpiryDateFormatter(),
-                                ],
-                              ),
-                            ],
+                          const SizedBox(height: 20),
+                          _buildLabel("CREDIT LIMIT (₹)"),
+                          _customTextField(limitController, "5,00,000", 
+                            keyboard: const TextInputType.numberWithOptions(decimal: true),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildLabel("CVV"),
-                              _customTextField(cvvController, "•••", 
-                                keyboard: TextInputType.number, 
-                                obscureText: true,
-                                formatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                ]
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildLabel("NETWORK"),
-                              _buildNetworkDropdown(),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    _buildLabel("CREDIT LIMIT"),
-                    _customTextField(limitController, "0.00", 
-                      keyboard: const TextInputType.numberWithOptions(decimal: true),
-                      prefix: const Padding(
-                        padding: EdgeInsets.only(left: 16, right: 8),
-                        child: Text("₹", style: TextStyle(color: Colors.white60, fontSize: 16)),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 40),
@@ -378,14 +428,14 @@ class _AddCardScreenState extends State<AddCardScreen> {
               padding: const EdgeInsets.all(20),
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
+                  minimumSize: const Size(double.infinity, 60),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  elevation: 8,
                 ),
                 onPressed: saveCard,
-                child: Text("SAVE CARD", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 16)),
+                child: Text("SAVE TO VAULT", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 16)),
               ),
             ),
           ],
@@ -394,80 +444,23 @@ class _AddCardScreenState extends State<AddCardScreen> {
     );
   }
 
-  Widget _getNetworkBadge() {
-    if (numberController.text.isEmpty) {
-      return const Icon(Icons.credit_card, color: Colors.white24, size: 24);
-    }
-    
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_isDuplicate)
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              "DUPLICATE",
-              style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold),
-            ),
-          ),
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
-          ),
-          child: Text(
-            _selectedNetwork,
-            style: GoogleFonts.poppins(
-              color: Colors.blueAccent,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNetworkDropdown() {
+  Widget _buildSectionContainer({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      height: 52,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.1)),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedNetwork,
-          dropdownColor: const Color(0xFF1E293B),
-          isExpanded: true,
-          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-          items: networks.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
-          }).toList(),
-          onChanged: (newValue) => setState(() => _selectedNetwork = newValue!),
-        ),
-      ),
+      child: child,
     );
   }
 
   Widget _buildLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
-      child: Text(text, style: GoogleFonts.poppins(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      padding: const EdgeInsets.only(bottom: 10, left: 4),
+      child: Text(text, style: GoogleFonts.poppins(color: Theme.of(context).hintColor.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
     );
   }
 
@@ -476,47 +469,55 @@ class _AddCardScreenState extends State<AddCardScreen> {
     List<TextInputFormatter>? formatters, 
     FocusNode? node, 
     Widget? suffix,
-    Widget? prefix,
     bool obscureText = false,
     bool isError = false,
     TextCapitalization textCapitalization = TextCapitalization.none,
     void Function(String)? onChanged,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
       controller: ctrl,
       focusNode: node,
       keyboardType: keyboard,
       inputFormatters: formatters,
       obscureText: obscureText,
-      textCapitalization: textCapitalization,
+      textCapitalization: (textCapitalization == TextCapitalization.none && ctrl == holderController) ? TextCapitalization.characters : textCapitalization,
       onChanged: onChanged,
-      style: GoogleFonts.poppins(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+      style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white10),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.05),
-        prefixIcon: prefix,
-        suffixIcon: suffix != null ? Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: suffix) : null,
+        fillColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+        suffixIcon: suffix,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12), 
-          borderSide: isError ? const BorderSide(color: Colors.redAccent, width: 1) : BorderSide.none,
-        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12), 
-          borderSide: isError ? const BorderSide(color: Colors.redAccent, width: 1) : BorderSide.none,
+          borderRadius: BorderRadius.circular(14), 
+          borderSide: BorderSide(color: isError ? Colors.redAccent.withOpacity(0.5) : Theme.of(context).dividerColor.withOpacity(0.1)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12), 
-          borderSide: BorderSide(color: isError ? Colors.redAccent : Colors.blueAccent, width: 1.5),
+          borderRadius: BorderRadius.circular(14), 
+          borderSide: BorderSide(color: isError ? Colors.redAccent : Theme.of(context).colorScheme.primary, width: 1.5),
         ),
       ),
     );
   }
+
+  Widget _getNetworkBadge() {
+    if (numberController.text.isEmpty) return Icon(Icons.credit_card, color: Theme.of(context).hintColor.withOpacity(0.2));
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
+      ),
+      child: Text(_selectedNetwork, style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
 }
 
-class CardNumberFormatter extends TextInputFormatter {
+class _CardNumberFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     var text = newValue.text.replaceAll(' ', '');
@@ -533,7 +534,7 @@ class CardNumberFormatter extends TextInputFormatter {
   }
 }
 
-class ExpiryDateFormatter extends TextInputFormatter {
+class _ExpiryDateFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     var text = newValue.text;
