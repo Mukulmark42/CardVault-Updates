@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/card_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/update_provider.dart';
 import '../services/auth_service.dart';
 import '../services/backup_service.dart';
 
@@ -15,34 +17,102 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final BackupService _backupService = BackupService();
-  bool _isProcessing = false;
-  String _processMessage = "Syncing with Vault...";
+  bool _isProcessingLogout = false;
+  String _logoutMessage = "Signing out securely...";
+  
+  String _appVersion = "1.0.0";
+  String _buildNumber = "1";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackageInfo();
+  }
+
+  Future<void> _loadPackageInfo() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = info.version;
+        _buildNumber = info.buildNumber;
+      });
+    }
+  }
+
+  void _showUpdateDialog(BuildContext context, UpdateProvider provider) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Consumer<UpdateProvider>(
+        builder: (context, updateProvider, child) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFF0F172A),
+          title: const Text("New Update Available 🚀", style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(updateProvider.updateMessage, style: const TextStyle(color: Colors.white70)),
+              if (updateProvider.isDownloading) ...[
+                const SizedBox(height: 20),
+                LinearProgressIndicator(
+                  value: updateProvider.downloadProgress / 100,
+                  color: Colors.deepPurpleAccent, 
+                  backgroundColor: Colors.white10
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Downloading: ${updateProvider.downloadProgress.toStringAsFixed(0)}%", 
+                  style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 12, fontWeight: FontWeight.bold)
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            if (!updateProvider.isDownloading)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Later", style: TextStyle(color: Colors.grey)),
+              ),
+            if (!updateProvider.isDownloading)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurpleAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => updateProvider.startUpdate(() {
+                  if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+                }),
+                child: const Text("Update Now"),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _handleLogout(BuildContext context) async {
     setState(() {
-      _isProcessing = true;
-      _processMessage = "Signing out securely...";
+      _isProcessingLogout = true;
+      _logoutMessage = "Signing out securely...";
     });
 
-    // 1. Artificial delay for the "few seconds" loading circle
     await Future.delayed(const Duration(seconds: 2));
 
-    // 2. Perform logout
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.signOut();
 
     if (mounted) {
-      setState(() => _isProcessing = false);
-      // 3. Clear all navigation routes to return to the root (main.dart home)
-      // The StreamBuilder in main.dart will then automatically show the LoginScreen
+      setState(() => _isProcessingLogout = false);
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 
   Future<void> _runBackupRestore(Future<void> Function() action, String successMessage) async {
     setState(() {
-      _isProcessing = true;
-      _processMessage = "Syncing with Vault...";
+      _isProcessingLogout = true;
+      _logoutMessage = "Syncing with Vault...";
     });
     try {
       await action();
@@ -67,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessingLogout = false);
     }
   }
 
@@ -75,6 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthService>(context).currentUser;
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final updateProvider = Provider.of<UpdateProvider>(context);
     final isDark = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
@@ -148,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: Switch(
                   value: isDark, 
                   onChanged: (v) => themeProvider.toggleTheme(v), 
-                  activeColor: Colors.deepPurpleAccent
+                  activeColor: Colors.deepPurpleAccent,
                 ),
               ),
 
@@ -228,10 +299,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }
                 },
               ),
+
+              const SizedBox(height: 16),
+              _buildSectionHeader("ABOUT"),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.info_outline_rounded,
+                color: Colors.blueGrey,
+                title: "App Version",
+                subtitle: "v$_appVersion ($_buildNumber)",
+                trailing: updateProvider.isUpdateAvailable 
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text("UPDATE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    )
+                  : null,
+                onTap: () {
+                  if (updateProvider.isUpdateAvailable) {
+                    _showUpdateDialog(context, updateProvider);
+                  } else {
+                    updateProvider.checkForUpdates().then((_) {
+                       if (mounted && !updateProvider.isUpdateAvailable) {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(content: Text("App is up to date! 🚀")),
+                         );
+                       }
+                    });
+                  }
+                },
+              ),
               const SizedBox(height: 40),
             ],
           ),
-          if (_isProcessing)
+          if (_isProcessingLogout)
             Container(
               color: Colors.black87,
               child: Center(
@@ -240,7 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     const CircularProgressIndicator(color: Colors.deepPurpleAccent),
                     const SizedBox(height: 20),
-                    Text(_processMessage, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
+                    Text(_logoutMessage, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),

@@ -249,6 +249,15 @@ class _AddCardScreenState extends State<AddCardScreen> {
       return;
     }
 
+    // Fix: Remove commas from credit limit input
+    String rawLimitText = limitController.text.replaceAll(',', '').trim();
+    double? creditLimit = double.tryParse(rawLimitText);
+    
+    if (creditLimit == null) {
+      _showError("Please enter a valid credit limit");
+      return;
+    }
+
     final card = CardModel(
       id: widget.card?.id,
       bank: bankController.text.trim(),
@@ -258,7 +267,7 @@ class _AddCardScreenState extends State<AddCardScreen> {
       holder: holderController.text.trim().toUpperCase(),
       expiry: expiryController.text.trim(),
       cvv: cvvController.text.trim(),
-      creditLimit: double.tryParse(limitController.text) ?? 0,
+      creditLimit: creditLimit,
       spent: widget.card?.spent ?? 0,
     );
 

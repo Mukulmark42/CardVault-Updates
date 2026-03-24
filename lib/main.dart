@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:workmanager/workmanager.dart';
@@ -7,6 +8,7 @@ import 'screens/lock_screen.dart';
 import 'screens/login_screen.dart';
 import 'providers/card_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/update_provider.dart';
 import 'services/auth_service.dart';
 import 'services/backup_service.dart';
 
@@ -42,6 +44,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => CardProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => UpdateProvider()),
         Provider<AuthService>(create: (_) => AuthService()),
       ],
       child: CardVault(firebaseInit: firebaseInit),
@@ -49,7 +52,7 @@ void main() async {
   );
 
   firebaseInit.then((_) {
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
     Workmanager().registerPeriodicTask(
       "1",
       "dailySync",
@@ -63,9 +66,22 @@ void main() async {
   });
 }
 
-class CardVault extends StatelessWidget {
+class CardVault extends StatefulWidget {
   final Future<FirebaseApp> firebaseInit;
   const CardVault({super.key, required this.firebaseInit});
+
+  @override
+  State<CardVault> createState() => _CardVaultState();
+}
+
+class _CardVaultState extends State<CardVault> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<UpdateProvider>().checkForUpdates();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +103,7 @@ class CardVault extends StatelessWidget {
         colorSchemeSeed: Colors.deepPurple,
       ),
       home: FutureBuilder(
-        future: firebaseInit,
+        future: widget.firebaseInit,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingScreen();

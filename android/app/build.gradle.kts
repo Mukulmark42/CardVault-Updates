@@ -7,33 +7,37 @@ plugins {
 
 android {
     namespace = "com.example.cardvault"
-    
-    // Updated to 36 as required by camera and other plugins
-    compileSdk = 36
+
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Fix for ota_update and modern Java features
+        isCoreLibraryDesugaringEnabled = true
+
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.example.cardvault"
-        minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        minSdk = flutter.minSdkVersion // Explicitly set for better Firebase/OTA support
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Required when adding many dependencies like Firebase/OTA
+        multiDexEnabled = true
     }
 
     buildTypes {
         getByName("release") {
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
-            
+
             isMinifyEnabled = true
             isShrinkResources = true
 
@@ -50,6 +54,9 @@ flutter {
 }
 
 dependencies {
+    // FIX: Updated to 2.1.4 as required by ota_update
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-analytics")
 }

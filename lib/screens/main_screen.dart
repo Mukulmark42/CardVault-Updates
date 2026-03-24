@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'home_screen.dart';
 import 'vault_screen.dart';
 import 'settings_screen.dart';
+import '../providers/update_provider.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -45,17 +47,41 @@ class _MainScreenState extends State<MainScreen> {
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
           elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
+          items: [
+            const BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),
               label: "Home",
             ),
-            BottomNavigationBarItem(
+            const BottomNavigationBarItem(
               icon: Icon(Icons.credit_card_rounded),
               label: "Cards",
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.settings_rounded),
+              icon: Consumer<UpdateProvider>(
+                builder: (context, updateProvider, child) {
+                  return Stack(
+                    children: [
+                      const Icon(Icons.settings_rounded),
+                      if (updateProvider.isUpdateAvailable)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(1),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 8,
+                              minHeight: 8,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
               label: "Settings",
             ),
           ],

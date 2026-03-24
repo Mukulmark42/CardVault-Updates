@@ -104,11 +104,17 @@ class _VaultScreenState extends State<VaultScreen> {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              double? val = double.tryParse(controller.text);
+              // Fix: Remove commas before parsing to prevent format exception
+              String rawText = controller.text.replaceAll(',', '').trim();
+              double? val = double.tryParse(rawText);
               if (val != null) {
                 final updatedCard = card.copyWith(spent: val);
                 await Provider.of<CardProvider>(context, listen: false).updateCard(updatedCard);
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Please enter a valid amount"))
+                );
               }
             },
             child: const Text("Update"),
