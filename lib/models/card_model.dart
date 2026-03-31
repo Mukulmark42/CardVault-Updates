@@ -9,6 +9,8 @@ class CardModel {
   String cvv;
   double creditLimit;
   double spent;
+  String? dueDate; // Stored as ISO8601 string
+  bool isPaid;
 
   CardModel({
     this.id,
@@ -21,6 +23,8 @@ class CardModel {
     required this.cvv,
     required this.creditLimit,
     required this.spent,
+    this.dueDate,
+    this.isPaid = false,
   });
 
   CardModel copyWith({
@@ -34,6 +38,8 @@ class CardModel {
     String? cvv,
     double? creditLimit,
     double? spent,
+    String? dueDate,
+    bool? isPaid,
   }) {
     return CardModel(
       id: id ?? this.id,
@@ -46,6 +52,8 @@ class CardModel {
       cvv: cvv ?? this.cvv,
       creditLimit: creditLimit ?? this.creditLimit,
       spent: spent ?? this.spent,
+      dueDate: dueDate ?? this.dueDate,
+      isPaid: isPaid ?? this.isPaid,
     );
   }
 
@@ -61,6 +69,8 @@ class CardModel {
       'cvv': cvv,
       'credit_limit': creditLimit,
       'spent': spent,
+      'due_date': dueDate,
+      'is_paid': isPaid ? 1 : 0,
     };
   }
 
@@ -76,6 +86,8 @@ class CardModel {
       cvv: map['cvv'] ?? '',
       creditLimit: (map['credit_limit'] as num?)?.toDouble() ?? 0.0,
       spent: (map['spent'] as num?)?.toDouble() ?? 0.0,
+      dueDate: map['due_date'],
+      isPaid: (map['is_paid'] ?? 0) == 1,
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/card_provider.dart';
 import '../widgets/credit_card_widget.dart';
 import '../services/backup_service.dart';
+import '../models/card_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -93,13 +94,24 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           child: Consumer<CardProvider>(
             builder: (context, provider, child) {
+              final missingDueDateCount = provider.cards.where((c) => c.dueDate == null).length;
+
               Map<String, int> bankCounts = {};
               for (var card in provider.cards) {
                 String shortName = _getAbbreviatedBank(card.bank);
                 bankCounts[shortName] = (bankCounts[shortName] ?? 0) + 1;
               }
 
-              final filteredCards = provider.cards.reversed.where((card) {
+              // Sorting logic for Home Screen: by Due Date
+              List<CardModel> sortedCards = List.from(provider.cards);
+              sortedCards.sort((a, b) {
+                if (a.dueDate == null && b.dueDate == null) return 0;
+                if (a.dueDate == null) return 1;
+                if (b.dueDate == null) return -1;
+                return DateTime.parse(a.dueDate!).compareTo(DateTime.parse(b.dueDate!));
+              });
+
+              final filteredCards = sortedCards.where((card) {
                 final query = _searchQuery.toLowerCase();
                 final matchesSearch = card.bank.toLowerCase().contains(query) ||
                     card.holder.toLowerCase().contains(query) ||
@@ -157,6 +169,36 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  if (missingDueDateCount > 0)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.orangeAccent.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.orangeAccent.withOpacity(0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.notification_important_rounded, color: Colors.orangeAccent),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  "$missingDueDateCount card${missingDueDateCount > 1 ? 's' : ''} missing due date. Update them in the Vault section.",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -280,7 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             final card = filteredCards[index];
                             return RepaintBoundary(
                               key: ValueKey('home_${card.id}'),
-                              child: CreditCardWidget(card: card),
+                              child: CreditCardWidget(
+                                card: card,
+                                isCompact: true,
+                              ),
                             );
                           },
                           childCount: filteredCards.length,

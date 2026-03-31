@@ -5,16 +5,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:intl/intl.dart';
 import '../models/card_model.dart';
 
 class CreditCardWidget extends StatefulWidget {
   final CardModel card;
   final bool showControls;
+  final bool isCompact;
 
   const CreditCardWidget({
     super.key, 
     required this.card, 
     this.showControls = true,
+    this.isCompact = false,
   });
 
   @override
@@ -123,7 +126,7 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
     if (b.contains("central bank")) return "centralbankofindia.co.in";
     if (b.contains("indian bank")) return "indianbank.in";
     if (b.contains("pnb") || b.contains("punjab national")) return "pnbindia.in";
-    if (b.contains("sbi") || b.contains("state bank")) return "sbicard.com"; // Fixed domain for SBI Card
+    if (b.contains("sbi") || b.contains("state bank")) return "sbicard.com"; 
     if (b.contains("uco")) return "ucobank.com"; 
     if (b.contains("union bank")) return "unionbankofindia.co.in";
 
@@ -139,17 +142,17 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
   Widget _buildBankLogo() {
     if (_bankDomain.isEmpty) return _buildInitialsFallback();
     return Container(
-      padding: const EdgeInsets.all(2.5),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(5)),
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(4)),
       child: CachedNetworkImage(
         imageUrl: "https://logo.clearbit.com/$_bankDomain",
-        height: 20, width: 20, memCacheHeight: 40, memCacheWidth: 40, fit: BoxFit.contain,
+        height: 18, width: 18, memCacheHeight: 36, memCacheWidth: 36, fit: BoxFit.contain,
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,
         placeholder: (context, url) => _buildInitialsFallback(),
         errorWidget: (context, url, error) => CachedNetworkImage(
           imageUrl: "https://www.google.com/s2/favicons?sz=64&domain=$_bankDomain",
-          height: 20, width: 20, placeholder: (c, u) => _buildInitialsFallback(),
+          height: 18, width: 18, placeholder: (c, u) => _buildInitialsFallback(),
           errorWidget: (c, u, e) => _buildInitialsFallback(),
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
@@ -162,9 +165,9 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
     String iconText = widget.card.bank.split(' ').first.toUpperCase();
     if (iconText.length > 4) iconText = iconText.substring(0, 4);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-      child: Text(iconText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5)),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
+      child: Text(iconText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
     );
   }
 
@@ -210,10 +213,20 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
   @override
   Widget build(BuildContext context) {
     double percent = widget.card.creditLimit > 0 ? (widget.card.spent / widget.card.creditLimit).clamp(0.0, 1.0) : 0.0;
+    
+    String? dueDateText;
+    if (widget.card.dueDate != null && !widget.card.isPaid) {
+      try {
+        final date = DateTime.parse(widget.card.dueDate!);
+        dueDateText = "Due On ${DateFormat('dd MMMM').format(date)}";
+      } catch (e) {
+        // ignore
+      }
+    }
 
     return Container(
-      constraints: const BoxConstraints(minHeight: 160),
-      margin: const EdgeInsets.only(bottom: 12),
+      constraints: BoxConstraints(minHeight: widget.isCompact ? 138 : 172),
+      margin: const EdgeInsets.only(bottom: 14),
       child: Stack(
         children: [
           Positioned.fill(
@@ -241,14 +254,19 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: 20, 
+              vertical: widget.isCompact ? 8 : 15,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    _buildBankLogo(),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -256,50 +274,65 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                         children: [
                           Text(widget.card.bank.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.8), maxLines: 1, overflow: TextOverflow.ellipsis),
                           if (widget.card.variant.isNotEmpty)
-                            Text(widget.card.variant.toUpperCase(), style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 0.3), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(widget.card.variant.toUpperCase(), style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 0.4), maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    _buildBankLogo(),
+                    if (dueDateText != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          dueDateText,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      width: 28, height: 18,
-                      decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFE5B567), Color(0xFFC09040)]), borderRadius: BorderRadius.circular(3)),
+                      width: 30, height: 20,
+                      decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFE5B567), Color(0xFFC09040)]), borderRadius: BorderRadius.circular(3.5)),
                     ),
                     if (widget.showControls)
                       IconButton(
                         onPressed: () => _copyToClipboard(widget.card.number, "Card number copied"),
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white70, size: 16),
-                        padding: const EdgeInsets.all(2),
+                        icon: const Icon(Icons.copy_rounded, color: Colors.white70, size: 17),
+                        padding: const EdgeInsets.all(4),
                         constraints: const BoxConstraints(),
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     Expanded(
                       child: Text(
                         _showNumber ? widget.card.number : widget.card.number.length >= 4 ? "**** **** **** ${widget.card.number.substring(widget.card.number.length - 4)}" : widget.card.number,
-                        style: GoogleFonts.robotoMono(color: Colors.white, fontSize: 19, letterSpacing: 1.0, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.robotoMono(color: Colors.white, fontSize: 20, letterSpacing: 1.1, fontWeight: FontWeight.bold),
                       ),
                     ),
                     if (widget.showControls)
                       IconButton(
-                        icon: Icon(_showNumber ? Icons.visibility_off : Icons.visibility, color: Colors.white38, size: 18),
+                        icon: Icon(_showNumber ? Icons.visibility_off : Icons.visibility, color: Colors.white38, size: 20),
                         onPressed: _toggleNumberVisibility,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -311,8 +344,8 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text("CARD HOLDER", style: TextStyle(fontSize: 8, color: Colors.white38, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
-                            Text(widget.card.holder.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1),
+                            const Text("CARD HOLDER", style: TextStyle(fontSize: 8.5, color: Colors.white38, fontWeight: FontWeight.bold, letterSpacing: 0.9)),
+                            Text(widget.card.holder.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1),
                           ],
                         ),
                       ),
@@ -323,8 +356,8 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                         onTap: () => _copyToClipboard(widget.card.expiry, "Expiry date copied"),
                         child: Column(
                           children: [
-                            const Text("EXPIRY", style: TextStyle(fontSize: 8, color: Colors.white38, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
-                            Text(widget.card.expiry, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                            const Text("EXPIRY", style: TextStyle(fontSize: 8.5, color: Colors.white38, fontWeight: FontWeight.bold, letterSpacing: 0.9)),
+                            Text(widget.card.expiry, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -335,7 +368,7 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           _buildNetworkLogo(),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 5),
                           GestureDetector(
                             onTap: () {
                               if (widget.showControls) {
@@ -345,10 +378,10 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text(_showCvv ? widget.card.cvv : "***", style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                Text(_showCvv ? widget.card.cvv : "***", style: const TextStyle(color: Colors.white, fontSize: 13)),
                                 if (widget.showControls) ...[
                                   const SizedBox(width: 4),
-                                  GestureDetector(onTap: _toggleCvvVisibility, child: Icon(_showCvv ? Icons.visibility_off : Icons.visibility, size: 14, color: Colors.white38)),
+                                  GestureDetector(onTap: _toggleCvvVisibility, child: Icon(_showCvv ? Icons.visibility_off : Icons.visibility, size: 15, color: Colors.white38)),
                                 ],
                               ],
                             ),
@@ -358,17 +391,17 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                     )
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(7),
-                        child: LinearProgressIndicator(value: percent, backgroundColor: Colors.white.withOpacity(0.1), color: Colors.white.withOpacity(0.6), minHeight: 1.5),
+                        child: LinearProgressIndicator(value: percent, backgroundColor: Colors.white.withOpacity(0.1), color: Colors.white.withOpacity(0.6), minHeight: 1.8),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text("Limit: ${_formatLimit(widget.card.creditLimit)}", style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 9),
+                    Text("Limit: ${_formatLimit(widget.card.creditLimit)}", style: const TextStyle(color: Colors.white54, fontSize: 11.5, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ],

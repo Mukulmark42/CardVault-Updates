@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <external-cache-path name="my_cache" path="." />
-    <external-files-path name="my_external_files" path="." />
+    <!-- Broad access to internal and external paths to resolve FileProvider root issues -->
+    <files-path name="internal_files" path="." />
+    <cache-path name="internal_cache" path="." />
+    <external-path name="external_root" path="." />
+    <external-files-path name="external_files" path="." />
+    <external-cache-path name="external_cache" path="." />
+
+    <!-- Specific for ota_update plugin -->
+    <root-path name="root" path="." />
 </paths>

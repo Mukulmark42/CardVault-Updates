@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/backup_service.dart';
+import '../providers/card_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,18 +34,27 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _handleGoogleSignIn() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
     final user = await authService.signInWithGoogle();
-    setState(() => _isLoading = false);
-    if (user == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to sign in with Google')),
-      );
+    
+    if (user != null && mounted) {
+      await _autoRestoreData();
+    }
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to sign in with Google')),
+        );
+      }
     }
   }
 
   Future<void> _handleEmailAuth() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
     dynamic result;
@@ -52,11 +63,29 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     } else {
       result = await authService.signUpWithEmail(_emailController.text, _passwordController.text);
     }
-    setState(() => _isLoading = false);
-    if (result == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Authentication failed. Please check your credentials.')),
-      );
+
+    if (result != null && mounted) {
+      await _autoRestoreData();
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Authentication failed. Please check your credentials.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _autoRestoreData() async {
+    try {
+      await BackupService().onlineRestore();
+      if (mounted) {
+        context.read<CardProvider>().refreshCards();
+      }
+    } catch (e) {
+      debugPrint("Auto-restore failed: $e");
     }
   }
 

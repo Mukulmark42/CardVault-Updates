@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.cardvault"
 
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -26,7 +26,7 @@ android {
     defaultConfig {
         applicationId = "com.example.cardvault"
         minSdk = flutter.minSdkVersion // Explicitly set for better Firebase/OTA support
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -55,8 +55,8 @@ flutter {
 
 dependencies {
     // FIX: Updated to 2.1.4 as required by ota_update
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
-    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-analytics")
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../providers/card_provider.dart';
 import '../models/card_model.dart';
 import '../widgets/credit_card_widget.dart';
+import '../services/notification_service.dart';
 import 'add_card_screen.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -31,7 +33,36 @@ class _VaultScreenState extends State<VaultScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.add_shopping_cart, color: Colors.green),
+                leading: const Icon(Icons.calendar_month, color: Colors.orange),
+                title: Text("Update Due Date", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _selectDueDate(card);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  card.isPaid ? Icons.undo_rounded : Icons.check_circle_outline,
+                  color: Colors.green,
+                ),
+                title: Text(
+                  card.isPaid ? "Mark as Unpaid" : "Mark as Paid",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final updatedCard = card.copyWith(isPaid: !card.isPaid);
+                  await Provider.of<CardProvider>(context, listen: false).updateCard(updatedCard);
+                  
+                  if (updatedCard.isPaid) {
+                    await NotificationService().cancelNotification(card.id ?? 0);
+                  } else {
+                    await NotificationService().scheduleDueDateNotification(updatedCard);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_shopping_cart, color: Colors.teal),
                 title: Text("Update Spent Amount", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
                 onTap: () {
                   Navigator.pop(sheetContext);
@@ -65,6 +96,41 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 
+  Future<void> _selectDueDate(CardModel card) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: card.dueDate != null ? DateTime.parse(card.dueDate!) : DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: Colors.deepPurpleAccent,
+              onPrimary: Colors.white,
+              surface: const Color(0xFF0F172A),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
+      final updatedCard = card.copyWith(
+        dueDate: picked.toIso8601String(),
+        isPaid: false, 
+      );
+      await Provider.of<CardProvider>(context, listen: false).updateCard(updatedCard);
+      await NotificationService().scheduleDueDateNotification(updatedCard);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Due date updated to ${DateFormat('dd MMM').format(picked)}"))
+      );
+    }
+  }
+
   Future<void> _confirmDeletion(CardModel card) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -80,6 +146,7 @@ class _VaultScreenState extends State<VaultScreen> {
 
     if (confirm == true && mounted) {
       await Provider.of<CardProvider>(context, listen: false).deleteCard(card.id!);
+      await NotificationService().cancelNotification(card.id ?? 0);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Card deleted")));
       }
@@ -104,17 +171,12 @@ class _VaultScreenState extends State<VaultScreen> {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              // Fix: Remove commas before parsing to prevent format exception
               String rawText = controller.text.replaceAll(',', '').trim();
               double? val = double.tryParse(rawText);
               if (val != null) {
                 final updatedCard = card.copyWith(spent: val);
                 await Provider.of<CardProvider>(context, listen: false).updateCard(updatedCard);
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Please enter a valid amount"))
-                );
               }
             },
             child: const Text("Update"),
@@ -142,7 +204,15 @@ class _VaultScreenState extends State<VaultScreen> {
         child: SafeArea(
           child: Consumer<CardProvider>(
             builder: (context, provider, child) {
-              final filteredCards = provider.cards.where((card) {
+              // Sorting logic for Vault: missing due date first
+              List<CardModel> sortedCards = List.from(provider.cards);
+              sortedCards.sort((a, b) {
+                if (a.dueDate == null && b.dueDate != null) return -1;
+                if (a.dueDate != null && b.dueDate == null) return 1;
+                return 0; // Keep order for others or sort alphabetically by bank
+              });
+
+              final filteredCards = sortedCards.where((card) {
                 final query = _searchQuery.toLowerCase();
                 return card.bank.toLowerCase().contains(query) || 
                        card.holder.toLowerCase().contains(query) ||

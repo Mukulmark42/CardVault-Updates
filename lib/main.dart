@@ -9,8 +9,10 @@ import 'screens/login_screen.dart';
 import 'providers/card_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
+import 'providers/security_provider.dart';
 import 'services/auth_service.dart';
 import 'services/backup_service.dart';
+import 'services/notification_service.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -39,12 +41,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Initialize Notifications
+  await NotificationService().init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => CardProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => UpdateProvider()),
+        ChangeNotifierProvider(create: (_) => SecurityProvider()),
         Provider<AuthService>(create: (_) => AuthService()),
       ],
       child: CardVault(firebaseInit: firebaseInit),
@@ -83,9 +89,88 @@ class _CardVaultState extends State<CardVault> {
     });
   }
 
+  void _showUpdateDialog(BuildContext context, UpdateProvider provider) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ListenableProvider.value(
+        value: provider,
+        child: Consumer<UpdateProvider>(
+          builder: (context, update, _) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: const Color(0xFF0F172A),
+            title: const Text("Update Available 🚀", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(update.updateMessage, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                if (update.isDownloading) ...[
+                  const SizedBox(height: 24),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: update.downloadProgress / 100,
+                      backgroundColor: Colors.white10,
+                      color: Colors.deepPurpleAccent,
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Text(
+                      "${update.downloadProgress.toInt()}% Downloaded",
+                      style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              if (!update.isDownloading) ...[
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Later", style: TextStyle(color: Colors.white38)),
+                ),
+                ElevatedButton(
+                  onPressed: () => update.startUpdate(() {
+                    Navigator.pop(ctx);
+                  }),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurpleAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("Update Now"),
+                ),
+              ] else ...[
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text("Installing soon...", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final updateProvider = Provider.of<UpdateProvider>(context);
+
+    // Listen for update availability
+    if (updateProvider.isUpdateAvailable && !updateProvider.isDownloading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (ModalRoute.of(context)?.isCurrent ?? false) {
+           _showUpdateDialog(context, updateProvider);
+        }
+      });
+    }
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,

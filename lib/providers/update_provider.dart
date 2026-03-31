@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class UpdateProvider extends ChangeNotifier {
   bool _isUpdateAvailable = false;
@@ -45,8 +47,28 @@ class UpdateProvider extends ChangeNotifier {
     }
   }
 
-  void startUpdate(void Function() onInstallStart) {
+  Future<void> startUpdate(void Function() onInstallStart) async {
     if (_apkUrl.isEmpty || _isDownloading) return;
+
+    // Request necessary permissions for OTA update
+    if (Platform.isAndroid) {
+      var status = await Permission.storage.status;
+      if (!status.isGranted) {
+        status = await Permission.storage.request();
+      }
+      
+      // On Android 13+, we might need to check for specific media permissions or just REQUEST_INSTALL_PACKAGES
+      // but ota_update usually requires storage if it downloads to external.
+      // However, if it downloads to internal, it might just need the Install permission.
+      
+      var installStatus = await Permission.requestInstallPackages.status;
+      if (!installStatus.isGranted) {
+        installStatus = await Permission.requestInstallPackages.request();
+      }
+
+      // If storage is still not granted, we might still try, but let's inform the user if possible
+      // or check for manageExternalStorage on newer versions if it fails.
+    }
 
     _isDownloading = true;
     _downloadProgress = 0;
@@ -63,6 +85,10 @@ class UpdateProvider extends ChangeNotifier {
             _isUpdateAvailable = false;
             notifyListeners();
             onInstallStart();
+          } else if (event.status == OtaStatus.PERMISSION_NOT_GRANTED_ERROR) {
+            _isDownloading = false;
+            debugPrint("OTA Update Error: Permission not granted");
+            notifyListeners();
           }
         },
         onError: (e) {

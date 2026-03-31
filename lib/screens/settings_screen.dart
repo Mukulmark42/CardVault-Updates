@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/card_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
+import '../providers/security_provider.dart';
 import '../services/auth_service.dart';
 import '../services/backup_service.dart';
 
@@ -17,8 +18,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final BackupService _backupService = BackupService();
-  bool _isProcessingLogout = false;
-  String _logoutMessage = "Signing out securely...";
+  bool _isProcessing = false;
+  String _processMessage = "Processing...";
   
   String _appVersion = "1.0.0";
   String _buildNumber = "1";
@@ -39,63 +40,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showUpdateDialog(BuildContext context, UpdateProvider provider) {
+  void _showPinDialog(BuildContext context) {
+    final security = context.read<SecurityProvider>();
+    final controller = TextEditingController();
+    
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Consumer<UpdateProvider>(
-        builder: (context, updateProvider, child) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFF0F172A),
-          title: const Text("New Update Available 🚀", style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(updateProvider.updateMessage, style: const TextStyle(color: Colors.white70)),
-              if (updateProvider.isDownloading) ...[
-                const SizedBox(height: 20),
-                LinearProgressIndicator(
-                  value: updateProvider.downloadProgress / 100,
-                  color: Colors.deepPurpleAccent, 
-                  backgroundColor: Colors.white10
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Downloading: ${updateProvider.downloadProgress.toStringAsFixed(0)}%", 
-                  style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 12, fontWeight: FontWeight.bold)
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            if (!updateProvider.isDownloading)
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Later", style: TextStyle(color: Colors.grey)),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF0F172A),
+        title: Text(security.isPinSet ? "Change PIN" : "Set 4-Digit PIN", style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("This PIN will be used as a fallback for biometric login.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              obscureText: true,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 10),
+              decoration: const InputDecoration(
+                counterText: "",
+                hintText: "••••",
+                hintStyle: TextStyle(color: Colors.white10),
               ),
-            if (!updateProvider.isDownloading)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurpleAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => updateProvider.startUpdate(() {
-                  if (Navigator.canPop(ctx)) Navigator.pop(ctx);
-                }),
-                child: const Text("Update Now"),
-              ),
+            ),
           ],
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.length == 4) {
+                security.setPin(controller.text);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PIN saved successfully")));
+              } else {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("PIN must be 4 digits")));
+              }
+            },
+            child: const Text("Save"),
+          ),
+        ],
       ),
     );
   }
 
   void _handleLogout(BuildContext context) async {
     setState(() {
-      _isProcessingLogout = true;
-      _logoutMessage = "Signing out securely...";
+      _isProcessing = true;
+      _processMessage = "Signing out securely...";
     });
 
     await Future.delayed(const Duration(seconds: 2));
@@ -104,15 +101,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await authService.signOut();
 
     if (mounted) {
-      setState(() => _isProcessingLogout = false);
+      setState(() => _isProcessing = false);
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 
   Future<void> _runBackupRestore(Future<void> Function() action, String successMessage) async {
     setState(() {
-      _isProcessingLogout = true;
-      _logoutMessage = "Syncing with Vault...";
+      _isProcessing = true;
+      _processMessage = "Syncing with Vault...";
     });
     try {
       await action();
@@ -137,7 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isProcessingLogout = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -146,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = Provider.of<AuthService>(context).currentUser;
     final themeProvider = Provider.of<ThemeProvider>(context);
     final updateProvider = Provider.of<UpdateProvider>(context);
+    final security = Provider.of<SecurityProvider>(context);
     final isDark = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
@@ -224,6 +222,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 16),
+              _buildSectionHeader("SECURITY"),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.fingerprint_rounded,
+                color: Colors.purpleAccent,
+                title: "Biometric Login",
+                subtitle: "Unlock vault with fingerprint",
+                trailing: Switch(
+                  value: security.isBiometricEnabled, 
+                  onChanged: (v) => security.setBiometricEnabled(v), 
+                  activeColor: Colors.deepPurpleAccent,
+                ),
+              ),
+              _buildSettingItem(
+                context: context,
+                icon: Icons.lock_outline_rounded,
+                color: Colors.blueAccent,
+                title: "Login PIN",
+                subtitle: security.isPinSet ? "Update your 4-digit PIN" : "Set a fallback PIN",
+                onTap: () => _showPinDialog(context),
+                trailing: security.isPinSet 
+                  ? IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () => security.removePin(),
+                    )
+                  : null,
+              ),
+
+              const SizedBox(height: 16),
               _buildSectionHeader("CLOUD SYNC"),
               _buildSettingItem(
                 context: context,
@@ -243,34 +270,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               
               const SizedBox(height: 16),
-              _buildSectionHeader("LOCAL BACKUP"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.ios_share_rounded,
-                color: Colors.orangeAccent,
-                title: "Export JSON",
-                subtitle: "Share encrypted backup file",
-                onTap: () => _runBackupRestore(_backupService.offlineBackup, "Backup file shared"),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.file_present_rounded,
-                color: Colors.tealAccent,
-                title: "Import JSON",
-                subtitle: "Restore from a shared file",
-                onTap: () => _runBackupRestore(_backupService.offlineRestore, "Local restore successful"),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("SECURITY"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.fingerprint_rounded,
-                color: Colors.purpleAccent,
-                title: "Biometric Lock",
-                subtitle: "Require fingerprint on start",
-                trailing: Switch(value: true, onChanged: (v) {}, activeColor: Colors.deepPurpleAccent),
-              ),
+              _buildSectionHeader("DANGER ZONE"),
               _buildSettingItem(
                 context: context,
                 icon: Icons.delete_forever_rounded,
@@ -308,34 +308,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: Colors.blueGrey,
                 title: "App Version",
                 subtitle: "v$_appVersion ($_buildNumber)",
-                trailing: updateProvider.isUpdateAvailable 
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text("UPDATE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    )
-                  : null,
                 onTap: () {
                   if (updateProvider.isUpdateAvailable) {
-                    _showUpdateDialog(context, updateProvider);
+                    context.read<UpdateProvider>().checkForUpdates();
                   } else {
-                    updateProvider.checkForUpdates().then((_) {
-                       if (mounted && !updateProvider.isUpdateAvailable) {
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(content: Text("App is up to date! 🚀")),
-                         );
-                       }
-                    });
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Checking for updates...")));
+                    updateProvider.checkForUpdates();
                   }
                 },
               ),
               const SizedBox(height: 40),
             ],
           ),
-          if (_isProcessingLogout)
+          if (_isProcessing)
             Container(
               color: Colors.black87,
               child: Center(
@@ -344,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     const CircularProgressIndicator(color: Colors.deepPurpleAccent),
                     const SizedBox(height: 20),
-                    Text(_logoutMessage, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
+                    Text(_processMessage, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),

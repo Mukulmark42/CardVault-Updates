@@ -18,7 +18,7 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-    return await openDatabase(path, version: 3, onCreate: _createDB, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 4, onCreate: _createDB, onUpgrade: _onUpgrade);
   }
 
   Future _createDB(Database db, int version) async {
@@ -33,7 +33,9 @@ class DatabaseHelper {
         expiry TEXT,
         cvv TEXT,
         credit_limit REAL,
-        spent REAL
+        spent REAL,
+        due_date TEXT,
+        is_paid INTEGER DEFAULT 0
       )
     ''');
   }
@@ -44,6 +46,10 @@ class DatabaseHelper {
     }
     if (oldVersion < 3) {
       await db.execute("ALTER TABLE cards ADD COLUMN network TEXT DEFAULT 'VISA'");
+    }
+    if (oldVersion < 4) {
+      await db.execute("ALTER TABLE cards ADD COLUMN due_date TEXT");
+      await db.execute("ALTER TABLE cards ADD COLUMN is_paid INTEGER DEFAULT 0");
     }
   }
 
