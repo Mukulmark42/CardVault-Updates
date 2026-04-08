@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'home_screen.dart';
 import 'vault_screen.dart';
 import 'settings_screen.dart';
+import 'dashboard_screen.dart';
 import '../providers/update_provider.dart';
 
 class MainScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
+    const DashboardScreen(),
     const VaultScreen(),
     const SettingsScreen(),
   ];
@@ -53,8 +55,12 @@ class _MainScreenState extends State<MainScreen> {
               label: "Home",
             ),
             const BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded),
+              label: "Analytics",
+            ),
+            const BottomNavigationBarItem(
               icon: Icon(Icons.credit_card_rounded),
-              label: "Cards",
+              label: "Vault",
             ),
             BottomNavigationBarItem(
               icon: Consumer<UpdateProvider>(

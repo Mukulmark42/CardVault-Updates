@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/card_provider.dart';
 import '../providers/security_provider.dart';
+import '../providers/profile_provider.dart';
 import '../services/auth_service.dart';
 import 'main_screen.dart';
 
@@ -83,6 +84,8 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     if (!mounted) return;
     await context.read<CardProvider>().initializeVault();
     if (!mounted) return;
+    await context.read<ProfileProvider>().refresh();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const MainScreen()),
@@ -141,22 +144,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
             SafeArea(
               child: Consumer<CardProvider>(
                 builder: (context, provider, child) {
-                  if (provider.isInitializing) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(color: Color(0xFF818CF8)),
-                          const SizedBox(height: 24),
-                          Text(
-                            "Synchronizing your Vault...",
-                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(

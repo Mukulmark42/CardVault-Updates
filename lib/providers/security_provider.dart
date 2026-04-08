@@ -5,10 +5,17 @@ class SecurityProvider extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   String? _pin;
   bool _isBiometricEnabled = true;
+  
+  // New notification settings
+  bool _showLinkEmailReminder = true;
+  bool _showUpdateDueDateReminder = true;
 
   String? get pin => _pin;
   bool get isBiometricEnabled => _isBiometricEnabled;
   bool get isPinSet => _pin != null && _pin!.length == 4;
+  
+  bool get showLinkEmailReminder => _showLinkEmailReminder;
+  bool get showUpdateDueDateReminder => _showUpdateDueDateReminder;
 
   SecurityProvider() {
     _loadSettings();
@@ -18,6 +25,13 @@ class SecurityProvider extends ChangeNotifier {
     _pin = await _storage.read(key: 'user_pin');
     String? bio = await _storage.read(key: 'biometric_enabled');
     _isBiometricEnabled = bio != 'false';
+    
+    String? linkRem = await _storage.read(key: 'show_link_email_reminder');
+    _showLinkEmailReminder = linkRem != 'false';
+    
+    String? dueRem = await _storage.read(key: 'show_update_due_date_reminder');
+    _showUpdateDueDateReminder = dueRem != 'false';
+    
     notifyListeners();
   }
 
@@ -38,6 +52,18 @@ class SecurityProvider extends ChangeNotifier {
   Future<void> setBiometricEnabled(bool enabled) async {
     await _storage.write(key: 'biometric_enabled', value: enabled.toString());
     _isBiometricEnabled = enabled;
+    notifyListeners();
+  }
+  
+  Future<void> setLinkEmailReminder(bool enabled) async {
+    await _storage.write(key: 'show_link_email_reminder', value: enabled.toString());
+    _showLinkEmailReminder = enabled;
+    notifyListeners();
+  }
+  
+  Future<void> setUpdateDueDateReminder(bool enabled) async {
+    await _storage.write(key: 'show_update_due_date_reminder', value: enabled.toString());
+    _showUpdateDueDateReminder = enabled;
     notifyListeners();
   }
 

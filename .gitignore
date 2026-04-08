@@ -43,3 +43,119 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase and Node.js
+node_modules/
+.firebase/
+.firebaserc
+serviceAccountKey.json
+token.json
+*.key
+*.pem
+*.crt
+
+# Build directories
+android/app/build/
+android/build/
+ios/build/
+linux/build/
+macos/build/
+web/build/
+
+# Flutter generated files
+.generated_plugin_registrant.dart
+.generated_plugin_registrant.cc
+.generated_plugin_registrant.h
+.generated_plugins.cmake
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# IDE specific
+.vscode/launch.json
+.vscode/settings.json
+
+# OS generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Package Files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+
+# Sensitive Firebase files
+getToken.js
+readEmails.js
+package-lock.json
+package.json
+functions/node_modules/
+
+# Flutter/Dart
+.packages
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter/
+.fvm/
+
+# Android
+android/.gradle/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+
+# iOS
+ios/.generated/
+ios/Flutter/Flutter.podspec
+ios/Pods/
+
+# macOS
+macos/.generated/
+macos/Flutter/FlutterMacOS.podspec
+macos/Pods/
+
+# Linux
+linux/.generated/
+
+# Windows
+windows/.generated/
+
+# Test coverage
+.coverage/
+coverage/
+
+# VS Code
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json
+.vscode/*.code-workspace
+
+# Project specific
+.agents/
+skills-lock.json
+devtools_options.yaml

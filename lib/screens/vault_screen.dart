@@ -69,6 +69,20 @@ class _VaultScreenState extends State<VaultScreen> {
                   showUpdateSpentDialog(card);
                 },
               ),
+              if (card.linkedEmail != null)
+                ListTile(
+                  leading: const Icon(Icons.link_off, color: Colors.amber),
+                  title: Text("Delink Email (${card.linkedEmail})", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    await Provider.of<CardProvider>(context, listen: false).delinkEmail(card);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Email delinked from card"))
+                      );
+                    }
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.edit, color: Colors.blue),
                 title: Text("Edit Card Details", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
@@ -119,8 +133,9 @@ class _VaultScreenState extends State<VaultScreen> {
 
     if (picked != null && mounted) {
       final updatedCard = card.copyWith(
-        dueDate: picked.toIso8601String(),
+        dueDate: () => picked.toIso8601String(),
         isPaid: false, 
+        isManualDueDate: true,
       );
       await Provider.of<CardProvider>(context, listen: false).updateCard(updatedCard);
       await NotificationService().scheduleDueDateNotification(updatedCard);

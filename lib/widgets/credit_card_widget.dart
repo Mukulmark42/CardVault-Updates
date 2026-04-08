@@ -210,6 +210,20 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
     return "${formatted}L";
   }
 
+  String _formatCardNumber(String number) {
+    // Remove any existing spaces just in case
+    String cleanNumber = number.replaceAll(RegExp(r'\s+'), '');
+    
+    // Group by 4 digits
+    List<String> groups = [];
+    for (int i = 0; i < cleanNumber.length; i += 4) {
+      int end = (i + 4 < cleanNumber.length) ? i + 4 : cleanNumber.length;
+      groups.add(cleanNumber.substring(i, end));
+    }
+    
+    return groups.join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     double percent = widget.card.creditLimit > 0 ? (widget.card.spent / widget.card.creditLimit).clamp(0.0, 1.0) : 0.0;
@@ -319,7 +333,11 @@ class _CreditCardWidgetState extends State<CreditCardWidget> {
                   children: [
                     Expanded(
                       child: Text(
-                        _showNumber ? widget.card.number : widget.card.number.length >= 4 ? "**** **** **** ${widget.card.number.substring(widget.card.number.length - 4)}" : widget.card.number,
+                        _showNumber 
+                            ? _formatCardNumber(widget.card.number) 
+                            : widget.card.number.length >= 4 
+                                ? "**** **** **** ${widget.card.number.substring(widget.card.number.length - 4)}" 
+                                : widget.card.number,
                         style: GoogleFonts.robotoMono(color: Colors.white, fontSize: 20, letterSpacing: 1.1, fontWeight: FontWeight.bold),
                       ),
                     ),

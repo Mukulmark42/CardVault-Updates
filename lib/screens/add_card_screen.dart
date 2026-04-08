@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import '../models/card_model.dart';
 import '../providers/card_provider.dart';
+import '../widgets/credit_card_widget.dart';
 
 class AddCardScreen extends StatefulWidget {
   final CardModel? card;
@@ -29,40 +31,209 @@ class _AddCardScreenState extends State<AddCardScreen> {
   String _lastDetectedBin = "";
   final List<String> networks = ["VISA", "MASTERCARD", "AMEX", "RUPAY"];
 
+  // Due date state
+  DateTime? _selectedDueDate;
+  bool _isManualDueDate =
+      false; // true = user locked it; false = auto from email
+
+  bool _isSaving = false;
+
   final List<String> banks = [
-    "HDFC Bank", "SBI Card", "ICICI Bank", "Axis Bank", "IDFC FIRST Bank",
-    "Kotak Mahindra Bank", "IndusInd Bank", "RBL Bank", "YES Bank", "Federal Bank",
-    "HSBC India", "Bank of Baroda (BOBCARD)", "Punjab National Bank (PNB)",
-    "American Express (Amex)", "Standard Chartered Bank", "AU Small Finance Bank",
-    "DBS Bank India", "Union Bank of India", "Canara Bank", "Bank of India (BOI)",
-    "Indian Bank", "IDBI Bank", "South Indian Bank (SIB)", "Central Bank of India"
+    "HDFC Bank",
+    "SBI Card",
+    "ICICI Bank",
+    "Axis Bank",
+    "IDFC FIRST Bank",
+    "Kotak Mahindra Bank",
+    "IndusInd Bank",
+    "RBL Bank",
+    "YES Bank",
+    "Federal Bank",
+    "HSBC India",
+    "Bank of Baroda (BOBCARD)",
+    "Punjab National Bank (PNB)",
+    "American Express (Amex)",
+    "Standard Chartered Bank",
+    "AU Small Finance Bank",
+    "DBS Bank India",
+    "Union Bank of India",
+    "Canara Bank",
+    "Bank of India (BOI)",
+    "Indian Bank",
+    "IDBI Bank",
+    "South Indian Bank (SIB)",
+    "Central Bank of India",
   ];
 
   final Map<String, List<String>> bankVariants = {
-    "HDFC Bank": ["HDFC Infinia", "HDFC Diners Club Black", "HDFC Regalia Gold", "HDFC Millennia", "HDFC Pixel Play", "Tata Neu Infinity", "Swiggy HDFC", "Marriott Bonvoy HDFC", "IndianOil HDFC"],
-    "SBI Card": ["SBI Cashback Card", "SBI SimplyCLICK", "SBI SimplySAVE", "SBI Card Prime", "SBI Card Elite", "BPCL SBI Card Octane", "Air India SBI Signature", "IRCTC SBI Platinum"],
-    "ICICI Bank": ["Amazon Pay ICICI", "ICICI Coral", "ICICI Rubyx", "ICICI Sapphiro", "ICICI Emeralde", "MakeMyTrip ICICI Signature", "Manchester United ICICI"],
-    "Axis Bank": ["Axis Magnus", "Axis Atlas", "Axis Reserve", "Axis ACE", "Flipkart Axis Bank", "Axis MyZone", "Airtel Axis Bank", "Vistara Axis Infinite"],
-    "IDFC FIRST Bank": ["IDFC First Millennia", "IDFC First Classic", "IDFC First Select", "IDFC First Wealth", "IDFC Ashva", "IDFC Mayura", "HPCL IDFC First Power+"],
-    "Kotak Mahindra Bank": ["Kotak League Platinum", "Kotak Zen Signature", "Kotak Mojo Card", "PVR INOX Kotak", "Kotak Myntra Card", "Kotak IndiGo Ka-ching", "Kotak White Card", "Kotak 811 #DreamDifferent"],
-    "IndusInd Bank": ["IndusInd Legend", "IndusInd Platinum Aura Edge", "IndusInd EazyDiner Card", "IndusInd Pioneer Heritage", "IndusInd Nexxt Card", "IndusInd Club Vistara Cards", "IndusInd Tiger"],
-    "RBL Bank": ["RBL Shoprite", "RBL World Safari", "RBL Edition Classic", "RBL SaveMax", "RBL Platinum Maxima"],
-    "YES Bank": ["YES Marquee", "YES Reserv", "YES Premia", "YES Elite", "YES BYOC (Build Your Own Card)"],
-    "Federal Bank": ["Federal Scapia", "Federal Celesta", "Federal Imperio", "Federal Signet"],
-    "HSBC India": ["HSBC Travel One", "HSBC Live+", "HSBC Visa Platinum", "HSBC Premier"],
-    "Bank of Baroda (BOBCARD)": ["BOBCARD Eterna", "BOBCARD Premier", "BOBCARD Select", "BOBCARD Easy", "BOBCARD Tiara", "HPCL BOBCARD ENERGIE", "Snapdeal BOBCARD"],
-    "Punjab National Bank (PNB)": ["PNB RuPay Platinum", "PNB RuPay Select", "PNB RuPay Millennial", "PNB Visa Signature", "PNB Rakshak RuPay Select"],
-    "American Express (Amex)": ["American Express Platinum Card", "American Express Platinum Travel", "American Express Gold Card", "American Express Membership Rewards", "American Express SmartEarn"],
-    "Standard Chartered Bank": ["Standard Chartered Smart Card", "Standard Chartered Platinum Rewards", "Standard Chartered Ultimate", "Standard Chartered Super Value Titanium", "Standard Chartered EaseMyTrip"],
-    "AU Small Finance Bank": ["AU Zenith+", "AU Zenith", "AU Vetta", "AU Altura Plus", "AU Altura", "AU LIT (Customizable Card)"],
-    "DBS Bank India": ["DBS Vantage", "DBS Spark", "Bajaj Finserv DBS Network Cards"],
-    "Union Bank of India": ["Union Bank Uni Carbon", "Union Bank Signature", "Union Bank Platinum", "Union Bank RuPay Select"],
-    "Canara Bank": ["Canara Visa Classic / Gold / Platinum", "Canara RuPay Select", "Canara MasterCard Standard"],
-    "Bank of India (BOI)": ["BOI RuPay Platinum", "BOI Visa Platinum", "BOI Swarnima"],
-    "Indian Bank": ["Indian Bank RuPay Platinum", "Indian Bank Visa Platinum", "Indian Bank Bharat Credit Card"],
+    "HDFC Bank": [
+      "HDFC Infinia",
+      "HDFC Diners Club Black",
+      "HDFC Regalia Gold",
+      "HDFC Millennia",
+      "HDFC Pixel Play",
+      "Tata Neu Infinity",
+      "Swiggy HDFC",
+      "Marriott Bonvoy HDFC",
+      "IndianOil HDFC",
+    ],
+    "SBI Card": [
+      "SBI Cashback Card",
+      "SBI SimplyCLICK",
+      "SBI SimplySAVE",
+      "SBI Card Prime",
+      "SBI Card Elite",
+      "BPCL SBI Card Octane",
+      "Air India SBI Signature",
+      "IRCTC SBI Platinum",
+    ],
+    "ICICI Bank": [
+      "Amazon Pay ICICI",
+      "ICICI Coral",
+      "ICICI Rubyx",
+      "ICICI Sapphiro",
+      "ICICI Emeralde",
+      "MakeMyTrip ICICI Signature",
+      "Manchester United ICICI",
+    ],
+    "Axis Bank": [
+      "Axis Magnus",
+      "Axis Atlas",
+      "Axis Reserve",
+      "Axis ACE",
+      "Flipkart Axis Bank",
+      "Axis MyZone",
+      "Airtel Axis Bank",
+      "Vistara Axis Infinite",
+    ],
+    "IDFC FIRST Bank": [
+      "IDFC First Millennia",
+      "IDFC First Classic",
+      "IDFC First Select",
+      "IDFC First Wealth",
+      "IDFC Ashva",
+      "IDFC Mayura",
+      "HPCL IDFC First Power+",
+    ],
+    "Kotak Mahindra Bank": [
+      "Kotak League Platinum",
+      "Kotak Zen Signature",
+      "Kotak Mojo Card",
+      "PVR INOX Kotak",
+      "Kotak Myntra Card",
+      "Kotak IndiGo Ka-ching",
+      "Kotak White Card",
+      "Kotak 811 #DreamDifferent",
+    ],
+    "IndusInd Bank": [
+      "IndusInd Legend",
+      "IndusInd Platinum Aura Edge",
+      "IndusInd EazyDiner Card",
+      "IndusInd Pioneer Heritage",
+      "IndusInd Nexxt Card",
+      "IndusInd Club Vistara Cards",
+      "IndusInd Tiger",
+    ],
+    "RBL Bank": [
+      "RBL Shoprite",
+      "RBL World Safari",
+      "RBL Edition Classic",
+      "RBL SaveMax",
+      "RBL Platinum Maxima",
+    ],
+    "YES Bank": [
+      "YES Marquee",
+      "YES Reserv",
+      "YES Premia",
+      "YES Elite",
+      "YES BYOC (Build Your Own Card)",
+    ],
+    "Federal Bank": [
+      "Federal Scapia",
+      "Federal Celesta",
+      "Federal Imperio",
+      "Federal Signet",
+    ],
+    "HSBC India": [
+      "HSBC Travel One",
+      "HSBC Live+",
+      "HSBC Visa Platinum",
+      "HSBC Premier",
+    ],
+    "Bank of Baroda (BOBCARD)": [
+      "BOBCARD Eterna",
+      "BOBCARD Premier",
+      "BOBCARD Select",
+      "BOBCARD Easy",
+      "BOBCARD Tiara",
+      "HPCL BOBCARD ENERGIE",
+      "Snapdeal BOBCARD",
+    ],
+    "Punjab National Bank (PNB)": [
+      "PNB RuPay Platinum",
+      "PNB RuPay Select",
+      "PNB RuPay Millennial",
+      "PNB Visa Signature",
+      "PNB Rakshak RuPay Select",
+    ],
+    "American Express (Amex)": [
+      "American Express Platinum Card",
+      "American Express Platinum Travel",
+      "American Express Gold Card",
+      "American Express Membership Rewards",
+      "American Express SmartEarn",
+    ],
+    "Standard Chartered Bank": [
+      "Standard Chartered Smart Card",
+      "Standard Chartered Platinum Rewards",
+      "Standard Chartered Ultimate",
+      "Standard Chartered Super Value Titanium",
+      "Standard Chartered EaseMyTrip",
+    ],
+    "AU Small Finance Bank": [
+      "AU Zenith+",
+      "AU Zenith",
+      "AU Vetta",
+      "AU Altura Plus",
+      "AU Altura",
+      "AU LIT (Customizable Card)",
+    ],
+    "DBS Bank India": [
+      "DBS Vantage",
+      "DBS Spark",
+      "Bajaj Finserv DBS Network Cards",
+    ],
+    "Union Bank of India": [
+      "Union Bank Uni Carbon",
+      "Union Bank Signature",
+      "Union Bank Platinum",
+      "Union Bank RuPay Select",
+    ],
+    "Canara Bank": [
+      "Canara Visa Classic / Gold / Platinum",
+      "Canara RuPay Select",
+      "Canara MasterCard Standard",
+    ],
+    "Bank of India (BOI)": [
+      "BOI RuPay Platinum",
+      "BOI Visa Platinum",
+      "BOI Swarnima",
+    ],
+    "Indian Bank": [
+      "Indian Bank RuPay Platinum",
+      "Indian Bank Visa Platinum",
+      "Indian Bank Bharat Credit Card",
+    ],
     "IDBI Bank": ["IDBI Winnings", "IDBI Aspire", "IDBI Imperium"],
-    "South Indian Bank (SIB)": ["SIB OneCard (Co-branded)", "SIB RuPay Platinum", "SIB Visa Signature"],
-    "Central Bank of India": ["Central Bank RuPay Select", "Central Bank RuPay Platinum"],
+    "South Indian Bank (SIB)": [
+      "SIB OneCard (Co-branded)",
+      "SIB RuPay Platinum",
+      "SIB Visa Signature",
+    ],
+    "Central Bank of India": [
+      "Central Bank RuPay Select",
+      "Central Bank RuPay Platinum",
+    ],
   };
 
   @override
@@ -77,6 +248,11 @@ class _AddCardScreenState extends State<AddCardScreen> {
       expiryController.text = widget.card!.expiry;
       cvvController.text = widget.card!.cvv;
       limitController.text = widget.card!.creditLimit.toString();
+      // Restore due date and manual override flag
+      if (widget.card!.dueDate != null) {
+        _selectedDueDate = DateTime.tryParse(widget.card!.dueDate!);
+      }
+      _isManualDueDate = widget.card!.isManualDueDate;
     }
 
     numberController.addListener(_handleNumberChange);
@@ -89,6 +265,55 @@ class _AddCardScreenState extends State<AddCardScreen> {
   void _handleNumberChange() {
     _detectNetworkAndDuplicate();
     _autoDetectBank();
+  }
+
+  CardModel _buildPreviewCard() {
+    // Parse credit limit, default to 0 if invalid
+    double limit = 0;
+    try {
+      String rawLimit = limitController.text.replaceAll(',', '').trim();
+      limit = double.tryParse(rawLimit) ?? 0;
+    } catch (_) {}
+
+    return CardModel(
+      id: widget.card?.id,
+      bank: bankController.text.trim().isEmpty
+          ? "Your Bank"
+          : bankController.text.trim(),
+      variant: variantController.text.trim().isEmpty
+          ? "Card Variant"
+          : variantController.text.trim(),
+      network: _selectedNetwork,
+      number: numberController.text
+          .replaceAll(' ', '')
+          .padRight(16, '•')
+          .substring(0, 16),
+      holder: holderController.text.trim().isEmpty
+          ? "CARDHOLDER NAME"
+          : holderController.text.trim().toUpperCase(),
+      expiry: expiryController.text.trim().isEmpty
+          ? "MM/YY"
+          : expiryController.text.trim(),
+      cvv: cvvController.text.trim().isEmpty
+          ? "•••"
+          : cvvController.text.trim(),
+      creditLimit: limit,
+      spent: 0,
+      dueDate: _selectedDueDate?.toIso8601String(),
+      isManualDueDate: _isManualDueDate,
+      linkedEmail: widget.card?.linkedEmail,
+    );
+  }
+
+  Widget _buildCardPreviewWidget() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: CreditCardWidget(
+        card: _buildPreviewCard(),
+        showControls: false,
+        isCompact: true,
+      ),
+    );
   }
 
   void _autoDetectBank() {
@@ -108,53 +333,212 @@ class _AddCardScreenState extends State<AddCardScreen> {
     // Comprehensive India-focused BIN mapping (Specific 6-digit BINs first)
     final List<Map<String, dynamic>> detectionRules = [
       // HDFC Bank
-      {'prefixes': ['431581', '456859'], 'bank': 'HDFC Bank', 'variant': 'HDFC Infinia'},
-      {'prefixes': ['405887', '524315'], 'bank': 'HDFC Bank', 'variant': 'HDFC Millennia'},
-      {'prefixes': ['486232', '424283'], 'bank': 'HDFC Bank', 'variant': 'HDFC Regalia Gold'},
-      {'prefixes': ['369110', '304381'], 'bank': 'HDFC Bank', 'variant': 'HDFC Diners Club Black'},
-      {'prefixes': ['4315', '4568', '4058', '4862', '4242', '4001', '4032', '4412', '4160', '5243', '5477', '5289'], 'bank': 'HDFC Bank'},
-      
+      {
+        'prefixes': ['431581', '456859'],
+        'bank': 'HDFC Bank',
+        'variant': 'HDFC Infinia',
+      },
+      {
+        'prefixes': ['405887', '524315'],
+        'bank': 'HDFC Bank',
+        'variant': 'HDFC Millennia',
+      },
+      {
+        'prefixes': ['486232', '424283'],
+        'bank': 'HDFC Bank',
+        'variant': 'HDFC Regalia Gold',
+      },
+      {
+        'prefixes': ['369110', '304381'],
+        'bank': 'HDFC Bank',
+        'variant': 'HDFC Diners Club Black',
+      },
+      {
+        'prefixes': [
+          '4315',
+          '4568',
+          '4058',
+          '4862',
+          '4242',
+          '4001',
+          '4032',
+          '4412',
+          '4160',
+          '5243',
+          '5477',
+          '5289',
+        ],
+        'bank': 'HDFC Bank',
+      },
+
       // ICICI Bank
-      {'prefixes': ['433919', '433920', '433921'], 'bank': 'ICICI Bank', 'variant': 'Amazon Pay ICICI'},
-      {'prefixes': ['472642'], 'bank': 'ICICI Bank', 'variant': 'ICICI Coral'},
-      {'prefixes': ['447746'], 'bank': 'ICICI Bank', 'variant': 'ICICI Sapphiro'},
-      {'prefixes': ['4339', '4726', '4477', '5176', '5546', '4629', '4623', '4055', '4213', '4053'], 'bank': 'ICICI Bank'},
-      
+      {
+        'prefixes': ['433919', '433920', '433921'],
+        'bank': 'ICICI Bank',
+        'variant': 'Amazon Pay ICICI',
+      },
+      {
+        'prefixes': ['472642'],
+        'bank': 'ICICI Bank',
+        'variant': 'ICICI Coral',
+      },
+      {
+        'prefixes': ['447746'],
+        'bank': 'ICICI Bank',
+        'variant': 'ICICI Sapphiro',
+      },
+      {
+        'prefixes': [
+          '4339',
+          '4726',
+          '4477',
+          '5176',
+          '5546',
+          '4629',
+          '4623',
+          '4055',
+          '4213',
+          '4053',
+        ],
+        'bank': 'ICICI Bank',
+      },
+
       // SBI Card
-      {'prefixes': ['459149'], 'bank': 'SBI Card', 'variant': 'SBI Cashback Card'},
-      {'prefixes': ['459246'], 'bank': 'SBI Card', 'variant': 'SBI SimplyCLICK'},
-      {'prefixes': ['4591', '4592', '5432', '5522', '6070', '5021', '4166', '4037', '4256', '4724'], 'bank': 'SBI Card'},
-      
+      {
+        'prefixes': ['459149'],
+        'bank': 'SBI Card',
+        'variant': 'SBI Cashback Card',
+      },
+      {
+        'prefixes': ['459246'],
+        'bank': 'SBI Card',
+        'variant': 'SBI SimplyCLICK',
+      },
+      {
+        'prefixes': [
+          '4591',
+          '4592',
+          '5432',
+          '5522',
+          '6070',
+          '5021',
+          '4166',
+          '4037',
+          '4256',
+          '4724',
+        ],
+        'bank': 'SBI Card',
+      },
+
       // Axis Bank
-      {'prefixes': ['422338'], 'bank': 'Axis Bank', 'variant': 'Axis Magnus'},
-      {'prefixes': ['438587'], 'bank': 'Axis Bank', 'variant': 'Axis Ace'},
-      {'prefixes': ['512540'], 'bank': 'Axis Bank', 'variant': 'Flipkart Axis Bank'},
-      {'prefixes': ['4223', '4385', '5125', '5326', '5245', '4054', '4160', '4623'], 'bank': 'Axis Bank'},
-      
+      {
+        'prefixes': ['422338'],
+        'bank': 'Axis Bank',
+        'variant': 'Axis Magnus',
+      },
+      {
+        'prefixes': ['438587'],
+        'bank': 'Axis Bank',
+        'variant': 'Axis Ace',
+      },
+      {
+        'prefixes': ['512540'],
+        'bank': 'Axis Bank',
+        'variant': 'Flipkart Axis Bank',
+      },
+      {
+        'prefixes': [
+          '4223',
+          '4385',
+          '5125',
+          '5326',
+          '5245',
+          '4054',
+          '4160',
+          '4623',
+        ],
+        'bank': 'Axis Bank',
+      },
+
       // Amex
-      {'prefixes': ['3712'], 'bank': 'American Express (Amex)', 'variant': 'American Express Gold Card'},
-      {'prefixes': ['3711'], 'bank': 'American Express (Amex)', 'variant': 'American Express Platinum Card'},
-      {'prefixes': ['34', '37'], 'bank': 'American Express (Amex)'},
-      
+      {
+        'prefixes': ['3712'],
+        'bank': 'American Express (Amex)',
+        'variant': 'American Express Gold Card',
+      },
+      {
+        'prefixes': ['3711'],
+        'bank': 'American Express (Amex)',
+        'variant': 'American Express Platinum Card',
+      },
+      {
+        'prefixes': ['34', '37'],
+        'bank': 'American Express (Amex)',
+      },
+
       // Others
-      {'prefixes': ['4166', '4386', '4413', '5262', '4037'], 'bank': 'Kotak Mahindra Bank'},
-      {'prefixes': ['4835', '4111', '4514', '4213'], 'bank': 'IDFC FIRST Bank'},
-      {'prefixes': ['5245', '5548', '4014', '4835'], 'bank': 'RBL Bank'},
-      {'prefixes': ['5521', '4262', '4451'], 'bank': 'YES Bank'},
-      {'prefixes': ['4413', '5241', '4037'], 'bank': 'AU Small Finance Bank'},
-      {'prefixes': ['4514', '4001', '4005', '4006'], 'bank': 'Federal Bank'},
-      {'prefixes': ['4000', '4001', '4005', '4006', '4514'], 'bank': 'HSBC India'},
-      {'prefixes': ['4037', '4054', '4315', '4514'], 'bank': 'Standard Chartered Bank'},
-      {'prefixes': ['4037', '4315', '4381', '5044', '5245', '5520'], 'bank': 'Bank of Baroda (BOBCARD)'},
-      {'prefixes': ['4037', '4111', '4262', '4315', '4514', '5217', '5241'], 'bank': 'Punjab National Bank (PNB)'},
-      {'prefixes': ['4001', '4037', '4262', '4315', '4514', '5241'], 'bank': 'Canara Bank'},
-      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'Union Bank of India'},
-      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'Indian Bank'},
-      {'prefixes': ['4037', '4262', '4315', '4514', '5241'], 'bank': 'IDBI Bank'},
+      {
+        'prefixes': ['4166', '4386', '4413', '5262', '4037'],
+        'bank': 'Kotak Mahindra Bank',
+      },
+      {
+        'prefixes': ['4835', '4111', '4514', '4213'],
+        'bank': 'IDFC FIRST Bank',
+      },
+      {
+        'prefixes': ['5245', '5548', '4014', '4835'],
+        'bank': 'RBL Bank',
+      },
+      {
+        'prefixes': ['5521', '4262', '4451'],
+        'bank': 'YES Bank',
+      },
+      {
+        'prefixes': ['4413', '5241', '4037'],
+        'bank': 'AU Small Finance Bank',
+      },
+      {
+        'prefixes': ['4514', '4001', '4005', '4006'],
+        'bank': 'Federal Bank',
+      },
+      {
+        'prefixes': ['4000', '4001', '4005', '4006', '4514'],
+        'bank': 'HSBC India',
+      },
+      {
+        'prefixes': ['4037', '4054', '4315', '4514'],
+        'bank': 'Standard Chartered Bank',
+      },
+      {
+        'prefixes': ['4037', '4315', '4381', '5044', '5245', '5520'],
+        'bank': 'Bank of Baroda (BOBCARD)',
+      },
+      {
+        'prefixes': ['4037', '4111', '4262', '4315', '4514', '5217', '5241'],
+        'bank': 'Punjab National Bank (PNB)',
+      },
+      {
+        'prefixes': ['4001', '4037', '4262', '4315', '4514', '5241'],
+        'bank': 'Canara Bank',
+      },
+      {
+        'prefixes': ['4037', '4262', '4315', '4514', '5241'],
+        'bank': 'Union Bank of India',
+      },
+      {
+        'prefixes': ['4037', '4262', '4315', '4514', '5241'],
+        'bank': 'Indian Bank',
+      },
+      {
+        'prefixes': ['4037', '4262', '4315', '4514', '5241'],
+        'bank': 'IDBI Bank',
+      },
     ];
 
     for (var rule in detectionRules) {
-      if ((rule['prefixes'] as List<String>).any((prefix) => raw.startsWith(prefix))) {
+      if ((rule['prefixes'] as List<String>).any(
+        (prefix) => raw.startsWith(prefix),
+      )) {
         detectedBank = rule['bank'] as String;
         detectedVariant = rule['variant'] as String? ?? "";
         break;
@@ -163,11 +547,13 @@ class _AddCardScreenState extends State<AddCardScreen> {
 
     if (detectedBank.isNotEmpty) {
       _lastDetectedBin = currentBin;
-      
+
       // If the user has manually entered a bank that's NOT in our list, we don't overwrite it.
       // If it IS in our list or empty, we update it.
-      bool isManualCustomBank = bankController.text.isNotEmpty && !banks.contains(bankController.text);
-      
+      bool isManualCustomBank =
+          bankController.text.isNotEmpty &&
+          !banks.contains(bankController.text);
+
       if (!isManualCustomBank) {
         setState(() {
           if (bankController.text != detectedBank) {
@@ -189,27 +575,32 @@ class _AddCardScreenState extends State<AddCardScreen> {
     if (rawNumber.isNotEmpty) {
       if (rawNumber.startsWith('4')) {
         network = "VISA";
-      } else if (RegExp(r'^5[1-5]').hasMatch(rawNumber) || 
-                 RegExp(r'^222[1-9]|22[3-9]|2[3-6]|27[0-1]|2720').hasMatch(rawNumber)) {
+      } else if (RegExp(r'^5[1-5]').hasMatch(rawNumber) ||
+          RegExp(
+            r'^222[1-9]|22[3-9]|2[3-6]|27[0-1]|2720',
+          ).hasMatch(rawNumber)) {
         network = "MASTERCARD";
       } else if (RegExp(r'^3[47]').hasMatch(rawNumber)) {
         network = "AMEX";
-      } else if (RegExp(r'^6(?:011|5|4[4-9]|22)').hasMatch(rawNumber) || 
-                 rawNumber.startsWith('60') || 
-                 rawNumber.startsWith('65') || 
-                 rawNumber.startsWith('81') || 
-                 rawNumber.startsWith('82') || 
-                 rawNumber.startsWith('508')) {
+      } else if (RegExp(r'^6(?:011|5|4[4-9]|22)').hasMatch(rawNumber) ||
+          rawNumber.startsWith('60') ||
+          rawNumber.startsWith('65') ||
+          rawNumber.startsWith('81') ||
+          rawNumber.startsWith('82') ||
+          rawNumber.startsWith('508')) {
         network = "RUPAY";
       }
     }
 
     bool isDup = false;
     final int targetLength = (network == "AMEX") ? 15 : 16;
-    
+
     if (rawNumber.length == targetLength) {
       final cardProvider = context.read<CardProvider>();
-      isDup = cardProvider.isCardDuplicate(rawNumber, excludeId: widget.card?.id);
+      isDup = cardProvider.isCardDuplicate(
+        rawNumber,
+        excludeId: widget.card?.id,
+      );
     }
 
     if (_selectedNetwork != network || _isDuplicate != isDup) {
@@ -234,6 +625,8 @@ class _AddCardScreenState extends State<AddCardScreen> {
   }
 
   void saveCard() async {
+    if (_isSaving) return;
+
     if (bankController.text.trim().isEmpty ||
         numberController.text.trim().isEmpty ||
         holderController.text.trim().isEmpty ||
@@ -252,7 +645,7 @@ class _AddCardScreenState extends State<AddCardScreen> {
     // Fix: Remove commas from credit limit input
     String rawLimitText = limitController.text.replaceAll(',', '').trim();
     double? creditLimit = double.tryParse(rawLimitText);
-    
+
     if (creditLimit == null) {
       _showError("Please enter a valid credit limit");
       return;
@@ -269,8 +662,12 @@ class _AddCardScreenState extends State<AddCardScreen> {
       cvv: cvvController.text.trim(),
       creditLimit: creditLimit,
       spent: widget.card?.spent ?? 0,
+      dueDate: _selectedDueDate?.toIso8601String(),
+      isManualDueDate: _isManualDueDate,
+      linkedEmail: widget.card?.linkedEmail,
     );
 
+    setState(() => _isSaving = true);
     try {
       final cardProvider = context.read<CardProvider>();
       if (widget.card == null) {
@@ -281,23 +678,29 @@ class _AddCardScreenState extends State<AddCardScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       _showError("Error saving card");
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: Colors.redAccent,
-      behavior: SnackBarBehavior.floating,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.card == null ? "New Card" : "Edit Details", 
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: Text(
+          widget.card == null ? "New Card" : "Edit Details",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -312,122 +715,22 @@ class _AddCardScreenState extends State<AddCardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 20),
-                    
-                    _buildSectionContainer(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("CARD NUMBER"),
-                          _customTextField(
-                            numberController,
-                            "0000 0000 0000 0000",
-                            keyboard: TextInputType.number,
-                            isError: _isDuplicate,
-                            formatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              _CardNumberFormatter(),
-                              LengthLimitingTextInputFormatter(19),
-                            ],
-                            suffix: _getNetworkBadge(),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildLabel("BANK NAME"),
-                          Autocomplete<String>(
-                            optionsBuilder: (textValue) => banks.where((b) => b.toLowerCase().contains(textValue.text.toLowerCase())),
-                            onSelected: (val) {
-                              setState(() {
-                                bankController.text = val;
-                              });
-                            },
-                            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
-                              if (bankController.text != ctrl.text && bankController.text.isNotEmpty && ctrl.text.isEmpty) {
-                                 Future.microtask(() => ctrl.text = bankController.text);
-                              }
-                              return _customTextField(
-                                ctrl, "e.g. HDFC Bank", node: node,
-                                onChanged: (val) {
-                                  bankController.text = val;
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+
+                    // Live card preview
+                    _buildCardPreviewWidget(),
+
+                    _buildCardNumberSection(),
                     const SizedBox(height: 16),
 
-                    _buildSectionContainer(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLabel("VARIANT & HOLDER"),
-                          Autocomplete<String>(
-                            optionsBuilder: (textValue) {
-                              List<String> variants = bankVariants[bankController.text.trim()] ?? [];
-                              if (textValue.text.isEmpty) return variants;
-                              return variants.where((v) => v.toLowerCase().contains(textValue.text.toLowerCase()));
-                            },
-                            onSelected: (val) => setState(() => variantController.text = val),
-                            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
-                              if (variantController.text != ctrl.text && variantController.text.isNotEmpty && ctrl.text.isEmpty) {
-                                Future.microtask(() => ctrl.text = variantController.text);
-                              }
-                              return _customTextField(
-                                ctrl, "e.g. Regalia Gold", node: node,
-                                onChanged: (val) => variantController.text = val,
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _customTextField(holderController, "FULL NAME ON CARD", textCapitalization: TextCapitalization.characters),
-                        ],
-                      ),
-                    ),
+                    _buildVariantHolderSection(),
                     const SizedBox(height: 16),
 
-                    _buildSectionContainer(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildLabel("EXPIRY"),
-                                    _customTextField(expiryController, "MM/YY", 
-                                      keyboard: TextInputType.number,
-                                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4), _ExpiryDateFormatter()]
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildLabel("CVV"),
-                                    _customTextField(cvvController, "•••", 
-                                      keyboard: TextInputType.number, obscureText: true,
-                                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)]
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          _buildLabel("CREDIT LIMIT (₹)"),
-                          _customTextField(limitController, "5,00,000", 
-                            keyboard: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildExpiryCvvLimitSection(),
+                    const SizedBox(height: 16),
+
+                    // ─── Due Date + Manual Override ──────────────────────────
+                    _buildDueDateSection(),
+
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -437,14 +740,34 @@ class _AddCardScreenState extends State<AddCardScreen> {
               padding: const EdgeInsets.all(20),
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundColor: _isSaving
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                      : Theme.of(context).colorScheme.primary,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   elevation: 8,
                 ),
-                onPressed: saveCard,
-                child: Text("SAVE TO VAULT", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 16)),
+                onPressed: _isSaving ? null : saveCard,
+                child: _isSaving
+                    ? SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        "SAVE TO VAULT",
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -458,25 +781,106 @@ class _AddCardScreenState extends State<AddCardScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+        color: isDark
+            ? Colors.white.withOpacity(0.03)
+            : Colors.black.withOpacity(0.03),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withOpacity(0.1),
+        ),
       ),
       child: child,
+    );
+  }
+
+  Widget _buildCardNumberSection() {
+    return _buildSectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabel("CARD NUMBER"),
+          _customTextField(
+            numberController,
+            "0000 0000 0000 0000",
+            keyboard: TextInputType.number,
+            isError: _isDuplicate,
+            formatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              _CardNumberFormatter(),
+              LengthLimitingTextInputFormatter(19),
+            ],
+            suffix: _getNetworkBadge(),
+          ),
+          if (_isDuplicate)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, size: 12, color: Colors.redAccent),
+                  const SizedBox(width: 6),
+                  Text(
+                    "This card already exists in your vault.",
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 20),
+          _buildLabel("BANK NAME"),
+          Autocomplete<String>(
+            optionsBuilder: (textValue) => banks.where(
+              (b) => b.toLowerCase().contains(textValue.text.toLowerCase()),
+            ),
+            onSelected: (val) {
+              setState(() {
+                bankController.text = val;
+              });
+            },
+            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
+              if (bankController.text != ctrl.text &&
+                  bankController.text.isNotEmpty &&
+                  ctrl.text.isEmpty) {
+                Future.microtask(() => ctrl.text = bankController.text);
+              }
+              return _customTextField(
+                ctrl,
+                "e.g. HDFC Bank",
+                node: node,
+                onChanged: (val) {
+                  bankController.text = val;
+                },
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10, left: 4),
-      child: Text(text, style: GoogleFonts.poppins(color: Theme.of(context).hintColor.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      child: Text(
+        text,
+        style: GoogleFonts.poppins(
+          color: Theme.of(context).hintColor.withOpacity(0.5),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
     );
   }
 
-  Widget _customTextField(TextEditingController ctrl, String hint, {
-    TextInputType? keyboard, 
-    List<TextInputFormatter>? formatters, 
-    FocusNode? node, 
+  Widget _customTextField(
+    TextEditingController ctrl,
+    String hint, {
+    TextInputType? keyboard,
+    List<TextInputFormatter>? formatters,
+    FocusNode? node,
     Widget? suffix,
     bool obscureText = false,
     bool isError = false,
@@ -490,45 +894,347 @@ class _AddCardScreenState extends State<AddCardScreen> {
       keyboardType: keyboard,
       inputFormatters: formatters,
       obscureText: obscureText,
-      textCapitalization: (textCapitalization == TextCapitalization.none && ctrl == holderController) ? TextCapitalization.characters : textCapitalization,
+      textCapitalization:
+          (textCapitalization == TextCapitalization.none &&
+              ctrl == holderController)
+          ? TextCapitalization.characters
+          : textCapitalization,
       onChanged: onChanged,
       style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
         filled: true,
-        fillColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.03)
+            : Colors.black.withOpacity(0.03),
         suffixIcon: suffix,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14), 
-          borderSide: BorderSide(color: isError ? Colors.redAccent.withOpacity(0.5) : Theme.of(context).dividerColor.withOpacity(0.1)),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: isError
+                ? Colors.redAccent.withOpacity(0.5)
+                : Theme.of(context).dividerColor.withOpacity(0.1),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14), 
-          borderSide: BorderSide(color: isError ? Colors.redAccent : Theme.of(context).colorScheme.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: isError
+                ? Colors.redAccent
+                : Theme.of(context).colorScheme.primary,
+            width: 1.5,
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildVariantHolderSection() {
+    return _buildSectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabel("VARIANT & HOLDER"),
+          Autocomplete<String>(
+            optionsBuilder: (textValue) {
+              List<String> variants =
+                  bankVariants[bankController.text.trim()] ?? [];
+              if (textValue.text.isEmpty) return variants;
+              return variants.where(
+                (v) => v.toLowerCase().contains(textValue.text.toLowerCase()),
+              );
+            },
+            onSelected: (val) => setState(() => variantController.text = val),
+            fieldViewBuilder: (ctx, ctrl, node, onFixed) {
+              if (variantController.text != ctrl.text &&
+                  variantController.text.isNotEmpty &&
+                  ctrl.text.isEmpty) {
+                Future.microtask(() => ctrl.text = variantController.text);
+              }
+              return _customTextField(
+                ctrl,
+                "e.g. Regalia Gold",
+                node: node,
+                onChanged: (val) => variantController.text = val,
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          _customTextField(
+            holderController,
+            "FULL NAME ON CARD",
+            textCapitalization: TextCapitalization.characters,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpiryCvvLimitSection() {
+    return _buildSectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLabel("EXPIRY"),
+                    _customTextField(
+                      expiryController,
+                      "MM/YY",
+                      keyboard: TextInputType.number,
+                      formatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                        _ExpiryDateFormatter(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLabel("CVV"),
+                    _customTextField(
+                      cvvController,
+                      "•••",
+                      keyboard: TextInputType.number,
+                      obscureText: true,
+                      formatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildLabel("CREDIT LIMIT (₹)"),
+          _customTextField(
+            limitController,
+            "5,00,000",
+            keyboard: const TextInputType.numberWithOptions(decimal: true),
+            formatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              _IndianNumberFormatter(),
+              LengthLimitingTextInputFormatter(15),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDueDateSection() {
+    return _buildSectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _buildLabel('PAYMENT DUE DATE')),
+              // Auto / Manual badge — tap to reset to auto
+              GestureDetector(
+                onTap: () {
+                  if (_isManualDueDate) {
+                    setState(() {
+                      _isManualDueDate = false;
+                      _selectedDueDate = null;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _isManualDueDate
+                        ? Colors.orangeAccent.withOpacity(0.15)
+                        : Colors.greenAccent.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _isManualDueDate
+                          ? Colors.orangeAccent.withOpacity(0.5)
+                          : Colors.greenAccent.withOpacity(0.4),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isManualDueDate
+                            ? Icons.lock_outline_rounded
+                            : Icons.auto_awesome_rounded,
+                        size: 11,
+                        color: _isManualDueDate
+                            ? Colors.orangeAccent
+                            : Colors.greenAccent,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isManualDueDate
+                            ? 'Manual · tap to reset'
+                            : 'Auto from email',
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: _isManualDueDate
+                              ? Colors.orangeAccent
+                              : Colors.greenAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Date picker tap target
+          GestureDetector(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate:
+                    _selectedDueDate ??
+                    DateTime.now().add(const Duration(days: 15)),
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+                helpText: 'Select Payment Due Date',
+                builder: (ctx, child) => Theme(
+                  data: Theme.of(ctx).copyWith(
+                    colorScheme: ColorScheme.dark(
+                      primary: Theme.of(ctx).colorScheme.primary,
+                      onPrimary: Colors.white,
+                      surface: const Color(0xFF1E293B),
+                      onSurface: Colors.white,
+                    ),
+                  ),
+                  child: child!,
+                ),
+              );
+              if (picked != null) {
+                setState(() {
+                  _selectedDueDate = picked;
+                  // Locking: email parser won't overwrite
+                  _isManualDueDate = true;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withOpacity(0.1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    size: 18,
+                    color: _selectedDueDate != null
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).hintColor,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _isManualDueDate && _selectedDueDate != null
+                        ? DateFormat('dd MMM yyyy').format(_selectedDueDate!)
+                        : 'Auto-detect from email',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: _selectedDueDate != null
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).hintColor.withOpacity(0.5),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_isManualDueDate)
+                    Icon(
+                      Icons.edit_calendar_rounded,
+                      size: 16,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.7),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_isManualDueDate) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                '🔒 Auto-detect off. Email sync won\'t change this date.',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.orangeAccent.withOpacity(0.8),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _getNetworkBadge() {
-    if (numberController.text.isEmpty) return Icon(Icons.credit_card, color: Theme.of(context).hintColor.withOpacity(0.2));
+    if (numberController.text.isEmpty)
+      return Icon(
+        Icons.credit_card,
+        color: Theme.of(context).hintColor.withOpacity(0.2),
+      );
     return Container(
       margin: const EdgeInsets.only(right: 12),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+        ),
       ),
-      child: Text(_selectedNetwork, style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(
+        _selectedNetwork,
+        style: GoogleFonts.poppins(
+          color: Theme.of(context).colorScheme.primary,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }
 
 class _CardNumberFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     var text = newValue.text.replaceAll(' ', '');
     var buffer = StringBuffer();
     for (int i = 0; i < text.length; i++) {
@@ -539,24 +1245,86 @@ class _CardNumberFormatter extends TextInputFormatter {
       }
     }
     var string = buffer.toString();
-    return newValue.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+    return newValue.copyWith(
+      text: string,
+      selection: TextSelection.collapsed(offset: string.length),
+    );
+  }
+}
+
+class _IndianNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) return newValue;
+
+    // Remove all non-digits
+    String cleanText = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+
+    // If empty after cleaning, return empty
+    if (cleanText.isEmpty) return newValue.copyWith(text: '');
+
+    // Parse as integer
+    int? value = int.tryParse(cleanText);
+    if (value == null) return oldValue;
+
+    // Format with Indian numbering system (lakhs)
+    String formatted = _formatIndian(value);
+
+    return newValue.copyWith(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _formatIndian(int number) {
+    String str = number.toString();
+    int len = str.length;
+
+    if (len <= 3) return str;
+
+    // For Indian numbering: last 3 digits, then 2 digits groups
+    String result = '';
+    int count = 0;
+
+    for (int i = len - 1; i >= 0; i--) {
+      result = str[i] + result;
+      count++;
+      if (count == 3 && i > 0) {
+        result = ',' + result;
+        count = 0;
+      } else if (count > 3 && (count - 3) % 2 == 0 && i > 0) {
+        result = ',' + result;
+      }
+    }
+    return result;
   }
 }
 
 class _ExpiryDateFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     var text = newValue.text;
     if (newValue.selection.baseOffset == 0) return newValue;
     var buffer = StringBuffer();
     for (int i = 0; i < text.length; i++) {
       buffer.write(text[i]);
       var nonZeroIndex = i + 1;
-      if (nonZeroIndex % 2 == 0 && nonZeroIndex != text.length && !text.contains('/')) {
+      if (nonZeroIndex % 2 == 0 &&
+          nonZeroIndex != text.length &&
+          !text.contains('/')) {
         buffer.write('/');
       }
     }
     var string = buffer.toString();
-    return newValue.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+    return newValue.copyWith(
+      text: string,
+      selection: TextSelection.collapsed(offset: string.length),
+    );
   }
 }

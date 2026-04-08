@@ -60,4 +60,5 @@ class DefaultFirebaseOptions {
     databaseURL: 'https://cardvault-77f33-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'cardvault-77f33.firebasestorage.app',
   );
+
 }

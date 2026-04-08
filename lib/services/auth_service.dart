@@ -1,10 +1,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
+import 'user_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  // UPDATED: Added Gmail scopes to allow the app to read bank emails
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: [
+      'email',
+      'https://www.googleapis.com/auth/gmail.readonly',
+    ],
+  );
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -21,7 +29,11 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
 
-      return await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      if (userCredential.user != null) {
+        await UserService.instance.updateUserNotificationData();
+      }
+      return userCredential;
     } catch (e) {
       debugPrint("Google Sign-In Error: ${e.toString()}");
       return null;
@@ -30,7 +42,11 @@ class AuthService {
 
   Future<UserCredential?> signInWithEmail(String email, String password) async {
     try {
-      return await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
+      if (userCredential.user != null) {
+        await UserService.instance.updateUserNotificationData();
+      }
+      return userCredential;
     } catch (e) {
       debugPrint("Email Sign-In Error: ${e.toString()}");
       return null;
@@ -39,7 +55,11 @@ class AuthService {
 
   Future<UserCredential?> signUpWithEmail(String email, String password) async {
     try {
-      return await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      final userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      if (userCredential.user != null) {
+        await UserService.instance.updateUserNotificationData();
+      }
+      return userCredential;
     } catch (e) {
       debugPrint("Email Sign-Up Error: ${e.toString()}");
       return null;
@@ -48,6 +68,7 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
+      await UserService.instance.clearUserToken();
       await _googleSignIn.signOut();
       await _auth.signOut();
     } catch (e) {

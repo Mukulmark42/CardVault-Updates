@@ -5,6 +5,7 @@ import '../providers/card_provider.dart';
 import '../widgets/credit_card_widget.dart';
 import '../services/backup_service.dart';
 import '../models/card_model.dart';
+import 'email_management_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +18,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = "";
   String? _selectedBank;
   bool _isSyncing = false;
+
+  // Once-per-session smart alert flag
+  static bool _sessionAlertShown = false;
 
   String _getAbbreviatedBank(String bank) {
     String name = bank.toUpperCase();
@@ -76,6 +80,125 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _checkAndShowSmartAlert(List<CardModel> cards) {
+    if (_sessionAlertShown) return;
+    final unlinked = cards.where((c) => c.linkedEmail == null).toList();
+    if (unlinked.isEmpty) return;
+    _sessionAlertShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showUnlinkedEmailAlert(unlinked.length);
+    });
+  }
+
+  void _showUnlinkedEmailAlert(int count) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+                color: Colors.orangeAccent.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orangeAccent.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.link_off_rounded,
+                      color: Colors.orangeAccent, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Email Sync Not Set Up',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: isDark ? Colors.white : Colors.black)),
+                      Text(
+                          '$count card${count > 1 ? 's are' : ' is'} not linked to any email.',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color:
+                                  isDark ? Colors.white54 : Colors.black45)),
+                    ],
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              Text(
+                'Link a Gmail account so CardVault can automatically detect bills, transactions, and payment confirmations.',
+                style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54),
+              ),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                          color: Colors.orangeAccent.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text('Later',
+                        style: GoogleFonts.poppins(
+                            color:
+                                isDark ? Colors.white54 : Colors.black38)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const EmailManagementScreen()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orangeAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text('Set Up Now',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -87,13 +210,16 @@ class _HomeScreenState extends State<HomeScreen> {
             center: const Alignment(-0.8, -0.6),
             radius: 1.2,
             colors: isDark 
-              ? [const Color(0xFF1E293B).withOpacity(0.5), const Color(0xFF020617)]
+              ? [const Color(0xFF1E293B).withValues(alpha: 0.5), const Color(0xFF020617)]
               : [Colors.blue.shade50, Colors.white],
           ),
         ),
         child: SafeArea(
           child: Consumer<CardProvider>(
             builder: (context, provider, child) {
+              // Trigger once-per-session smart alert after frame is drawn
+              _checkAndShowSmartAlert(provider.cards);
+
               final missingDueDateCount = provider.cards.where((c) => c.dueDate == null).length;
 
               Map<String, int> bankCounts = {};
