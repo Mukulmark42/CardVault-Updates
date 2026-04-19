@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -55,18 +56,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: const Color(0xFF0F172A),
         title: Text(
           security.isPinSet ? "Change PIN" : "Set 4-Digit PIN",
-          style: const TextStyle(color: Colors.white),
+          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               "This PIN will be used as a fallback for biometric login.",
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              style: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -78,13 +79,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 24,
-                letterSpacing: 10,
+                fontSize: 28,
+                letterSpacing: 14,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 counterText: "",
                 hintText: "••••",
-                hintStyle: TextStyle(color: Colors.white10),
+                hintStyle: const TextStyle(color: Colors.white12, fontSize: 28),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Colors.white12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFF7C3AED), width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.04),
               ),
             ),
           ],
@@ -92,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
+            child: Text("Cancel", style: GoogleFonts.poppins(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -100,7 +111,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 security.setPin(controller.text);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("PIN saved successfully")),
+                  SnackBar(
+                    content: const Text("PIN saved successfully"),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 );
               } else {
                 ScaffoldMessenger.of(ctx).showSnackBar(
@@ -108,7 +124,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               }
             },
-            child: const Text("Save"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C3AED),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text("Save", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -134,6 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Account ${account.email} added successfully"),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           );
         }
@@ -163,9 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              "No linked email accounts. Use 'Add Google Account' first.",
-            ),
+            content: Text("No linked email accounts. Use 'Add Google Account' first."),
           ),
         );
       }
@@ -241,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _confirmDelink(context, email);
                 },
               );
-            }).toList(),
+            }),
           ],
         ),
         actions: [
@@ -299,9 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Error: $e")));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
         }
       } finally {
         if (mounted) setState(() => _isProcessing = false);
@@ -343,6 +362,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text(successMessage),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.green.shade800,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -353,12 +373,143 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text("Action failed: ${e.toString()}"),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.redAccent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
+
+  void _showUpdateScreen(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Consumer<UpdateProvider>(
+        builder: (context, updateProvider, child) {
+          final localVersion = 'v$_appVersion ($_buildNumber)';
+          final remoteVersion = updateProvider.remoteVersion.isNotEmpty
+              ? updateProvider.remoteVersion
+              : 'Unknown';
+          final releaseNotes = updateProvider.releaseNotes.isNotEmpty
+              ? updateProvider.releaseNotes
+              : 'No release notes provided.';
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: const Color(0xFF0F172A),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Text("New Update 🚀",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    )),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Current: $localVersion',
+                      style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  Text('Latest:  v$remoteVersion',
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                  const SizedBox(height: 16),
+                  const Text('Release Notes:',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  const Divider(color: Colors.white10),
+                  Text(releaseNotes,
+                      style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                  const SizedBox(height: 16),
+                  if (updateProvider.isDownloading)
+                    Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: LinearProgressIndicator(
+                            value: updateProvider.downloadProgress / 100,
+                            minHeight: 8,
+                            backgroundColor: Colors.white10,
+                            color: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Downloading: ${updateProvider.downloadProgress.toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  if (updateProvider.hasError)
+                    Container(
+                      margin: const EdgeInsets.only(top: 16),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              updateProvider.errorMessage,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              if (!updateProvider.isDownloading)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text("Later", style: GoogleFonts.poppins(color: Colors.white54)),
+                ),
+              ElevatedButton(
+                onPressed: updateProvider.isDownloading
+                    ? null
+                    : () => updateProvider.startUpdate(() {}),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      updateProvider.hasError ? Colors.orange : const Color(0xFF7C3AED),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  updateProvider.isDownloading
+                      ? "Downloading..."
+                      : (updateProvider.hasError ? "Retry" : "Update Now"),
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -370,342 +521,644 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          "Settings",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+      backgroundColor: isDark ? const Color(0xFF020617) : const Color(0xFFF0F4FF),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? const RadialGradient(
+                  center: Alignment(0.0, -0.8),
+                  radius: 1.4,
+                  colors: [Color(0xFF1A1040), Color(0xFF020617)],
+                )
+              : const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFEEF2FF), Color(0xFFF8FAFF)],
+                ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Stack(
-        children: [
-          ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              const SizedBox(height: 10),
-              // User Profile Card
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark
-                        ? [Colors.deepPurple.shade800, Colors.blue.shade800]
-                        : [Colors.deepPurple.shade100, Colors.blue.shade100],
+        child: Stack(
+          children: [
+            CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // ── Premium App Bar ─────────────────────────────────────
+                SliverAppBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  pinned: false,
+                  floating: true,
+                  snap: true,
+                  title: Text(
+                    "Settings",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 22,
+                      color: isDark ? Colors.white : const Color(0xFF1A1040),
+                      letterSpacing: -0.3,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(16),
+                  centerTitle: false,
                 ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.deepPurpleAccent,
-                      child: Text(
-                        user?.email?.substring(0, 1).toUpperCase() ?? "U",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.email ?? "Guest User",
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
+
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+
+                        // ── Premium User Profile Card ─────────────────────
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                gradient: isDark
+                                    ? LinearGradient(
+                                        colors: [
+                                          const Color(0xFF7C3AED).withOpacity(0.25),
+                                          const Color(0xFF4F46E5).withOpacity(0.12),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      )
+                                    : LinearGradient(
+                                        colors: [
+                                          const Color(0xFF7C3AED).withOpacity(0.12),
+                                          const Color(0xFF4F46E5).withOpacity(0.06),
+                                        ],
+                                      ),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: const Color(0xFF7C3AED).withOpacity(isDark ? 0.35 : 0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  // Avatar
+                                  Container(
+                                    width: 54,
+                                    height: 54,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF7C3AED).withOpacity(0.4),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        user?.email?.substring(0, 1).toUpperCase() ?? "U",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          user?.email ?? "Guest User",
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? Colors.white : Colors.black87,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              width: 7,
+                                              height: 7,
+                                              decoration: BoxDecoration(
+                                                color: Colors.greenAccent,
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.greenAccent.withOpacity(0.6),
+                                                    blurRadius: 4,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              "Cloud Sync Active",
+                                              style: GoogleFonts.poppins(
+                                                color: isDark ? Colors.white54 : Colors.black45,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Logout button
+                                  GestureDetector(
+                                    onTap: () => _handleLogout(context),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.redAccent.withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Colors.redAccent.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.logout_rounded,
+                                        color: Colors.redAccent,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Cloud Sync Active",
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        size: 20,
-                        color: Colors.redAccent,
-                      ),
-                      onPressed: () => _handleLogout(context),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              _buildSectionHeader("APPEARANCE"),
-              _buildSettingItem(
-                context: context,
-                icon: isDark
-                    ? Icons.dark_mode_rounded
-                    : Icons.light_mode_rounded,
-                color: isDark ? Colors.orangeAccent : Colors.amber,
-                title: "Dark Mode",
-                subtitle: isDark ? "Current: Dark" : "Current: Light",
-                trailing: Switch(
-                  value: isDark,
-                  onChanged: (v) => themeProvider.toggleTheme(v),
-                  activeColor: Colors.deepPurpleAccent,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("PROFILES"),
-              Consumer<ProfileProvider>(
-                builder: (context, profileProvider, _) {
-                  final count = profileProvider.profiles.length;
-                  final defaultProfile = profileProvider.activeProfile;
-                  final subtitle = count == 0
-                      ? "Create card holder profiles"
-                      : "$count profile${count > 1 ? 's' : ''}${defaultProfile != null ? ' • Default: ${defaultProfile.name}' : ''}";
-
-                  return _buildSettingItem(
-                    context: context,
-                    icon: Icons.people_outline_rounded,
-                    color: Colors.pinkAccent,
-                    title: "Manage Profiles",
-                    subtitle: subtitle,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfilesScreen()),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("SECURITY & LINKING"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.alternate_email_rounded,
-                color: Colors.cyanAccent,
-                title: "Manage Gmail Accounts",
-                subtitle: "Add or remove authorized emails",
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const EmailManagementScreen(),
-                  ),
-                ),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.link_rounded,
-                color: Colors.blueAccent,
-                title: "Link Cards to Email",
-                subtitle: "Select multiple cards to link",
-                onTap: () => _showLinkEmailDialog(context),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.link_off_rounded,
-                color: Colors.amberAccent,
-                title: "Delink Email ID",
-                subtitle: "Stop syncing for all linked cards",
-                onTap: () => _showDelinkEmailDialog(context),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.fingerprint_rounded,
-                color: Colors.purpleAccent,
-                title: "Biometric Login",
-                subtitle: "Unlock vault with fingerprint",
-                trailing: Switch(
-                  value: security.isBiometricEnabled,
-                  onChanged: (v) => security.setBiometricEnabled(v),
-                  activeColor: Colors.deepPurpleAccent,
-                ),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.lock_outline_rounded,
-                color: Colors.blueAccent,
-                title: "Login PIN",
-                subtitle: security.isPinSet
-                    ? "Update your 4-digit PIN"
-                    : "Set a fallback PIN",
-                onTap: () => _showPinDialog(context),
-                trailing: security.isPinSet
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent,
-                        ),
-                        onPressed: () => security.removePin(),
-                      )
-                    : null,
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("NOTIFICATIONS"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.email_outlined,
-                color: Colors.indigoAccent,
-                title: "Link Email Reminder",
-                subtitle: "Notify if cards are not linked",
-                trailing: Switch(
-                  value: security.showLinkEmailReminder,
-                  onChanged: (v) => security.setLinkEmailReminder(v),
-                  activeColor: Colors.deepPurpleAccent,
-                ),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.calendar_month_outlined,
-                color: Colors.orangeAccent,
-                title: "Due Date Reminder",
-                subtitle: "Notify if due dates are missing",
-                trailing: Switch(
-                  value: security.showUpdateDueDateReminder,
-                  onChanged: (v) => security.setUpdateDueDateReminder(v),
-                  activeColor: Colors.deepPurpleAccent,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("CLOUD SYNC"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.cloud_upload_outlined,
-                color: Colors.blueAccent,
-                title: "Manual Backup",
-                subtitle: "Push local cards to Firebase",
-                onTap: () => _runBackupRestore(
-                  _backupService.onlineBackup,
-                  "Cloud backup successful",
-                ),
-              ),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.cloud_download_outlined,
-                color: Colors.greenAccent,
-                title: "Cloud Restore",
-                subtitle: "Sync data from your account",
-                onTap: () => _runBackupRestore(
-                  _backupService.onlineRestore,
-                  "Cloud restore successful",
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionHeader("DANGER ZONE"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.delete_forever_rounded,
-                color: Colors.redAccent,
-                title: "Wipe Local Data",
-                subtitle: "Delete all cards from this device",
-                onTap: () async {
-                  bool? confirm = await showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      title: const Text("Confirm Wipe"),
-                      content: const Text(
-                        "This will delete all cards from local storage. Cloud data is safe.",
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text("Cancel"),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text(
-                            "Wipe Everything",
-                            style: TextStyle(color: Colors.red),
                           ),
                         ),
+
+                        const SizedBox(height: 28),
+
+                        // ── APPEARANCE ──────────────────────────────────────
+                        _buildSectionHeader("APPEARANCE", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                          color: isDark ? const Color(0xFFFFB347) : const Color(0xFFFFD700),
+                          title: "Dark Mode",
+                          subtitle: isDark ? "Dark theme active" : "Light theme active",
+                          isDark: isDark,
+                          trailing: Switch(
+                            value: isDark,
+                            onChanged: (v) => themeProvider.toggleTheme(v),
+                            activeColor: const Color(0xFF7C3AED),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── PROFILES ────────────────────────────────────────
+                        _buildSectionHeader("PROFILES", isDark),
+                        Consumer<ProfileProvider>(
+                          builder: (context, profileProvider, _) {
+                            final count = profileProvider.profiles.length;
+                            final defaultProfile = profileProvider.activeProfile;
+                            final subtitle = count == 0
+                                ? "Create card holder profiles"
+                                : "$count profile${count > 1 ? 's' : ''}${defaultProfile != null ? ' • Default: ${defaultProfile.name}' : ''}";
+
+                            return _buildSettingItem(
+                              context: context,
+                              icon: Icons.people_outline_rounded,
+                              color: const Color(0xFFEC4899),
+                              title: "Manage Profiles",
+                              subtitle: subtitle,
+                              isDark: isDark,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const ProfilesScreen()),
+                              ),
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── SECURITY & LINKING ──────────────────────────────
+                        _buildSectionHeader("SECURITY & LINKING", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.alternate_email_rounded,
+                          color: const Color(0xFF06B6D4),
+                          title: "Manage Gmail Accounts",
+                          subtitle: "Add or remove authorized emails",
+                          isDark: isDark,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const EmailManagementScreen()),
+                          ),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.link_rounded,
+                          color: const Color(0xFF3B82F6),
+                          title: "Link Cards to Email",
+                          subtitle: "Select multiple cards to link",
+                          isDark: isDark,
+                          onTap: () => _showLinkEmailDialog(context),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.link_off_rounded,
+                          color: const Color(0xFFF59E0B),
+                          title: "Delink Email ID",
+                          subtitle: "Stop syncing for all linked cards",
+                          isDark: isDark,
+                          onTap: () => _showDelinkEmailDialog(context),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.fingerprint_rounded,
+                          color: const Color(0xFF8B5CF6),
+                          title: "Biometric Login",
+                          subtitle: "Unlock vault with fingerprint",
+                          isDark: isDark,
+                          trailing: Switch(
+                            value: security.isBiometricEnabled,
+                            onChanged: (v) => security.setBiometricEnabled(v),
+                            activeColor: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.lock_outline_rounded,
+                          color: const Color(0xFF3B82F6),
+                          title: "Login PIN",
+                          subtitle: security.isPinSet ? "Update your 4-digit PIN" : "Set a fallback PIN",
+                          isDark: isDark,
+                          onTap: () => _showPinDialog(context),
+                          trailing: security.isPinSet
+                              ? IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                  onPressed: () => security.removePin(),
+                                )
+                              : null,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── NOTIFICATIONS ───────────────────────────────────
+                        _buildSectionHeader("NOTIFICATIONS", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.email_outlined,
+                          color: const Color(0xFF6366F1),
+                          title: "Link Email Reminder",
+                          subtitle: "Notify if cards are not linked",
+                          isDark: isDark,
+                          trailing: Switch(
+                            value: security.showLinkEmailReminder,
+                            onChanged: (v) => security.setLinkEmailReminder(v),
+                            activeColor: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.calendar_month_outlined,
+                          color: const Color(0xFFFF8C00),
+                          title: "Due Date Reminder",
+                          subtitle: "Notify if due dates are missing",
+                          isDark: isDark,
+                          trailing: Switch(
+                            value: security.showUpdateDueDateReminder,
+                            onChanged: (v) => security.setUpdateDueDateReminder(v),
+                            activeColor: const Color(0xFF7C3AED),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── CLOUD SYNC ──────────────────────────────────────
+                        _buildSectionHeader("CLOUD SYNC", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.cloud_upload_outlined,
+                          color: const Color(0xFF3B82F6),
+                          title: "Manual Backup",
+                          subtitle: "Push local cards to Firebase",
+                          isDark: isDark,
+                          onTap: () => _runBackupRestore(
+                            _backupService.onlineBackup,
+                            "Cloud backup successful",
+                          ),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.cloud_download_outlined,
+                          color: const Color(0xFF10B981),
+                          title: "Cloud Restore",
+                          subtitle: "Sync data from your account",
+                          isDark: isDark,
+                          onTap: () => _runBackupRestore(
+                            _backupService.onlineRestore,
+                            "Cloud restore successful",
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── LOCAL BACKUP ────────────────────────────────────
+                        _buildSectionHeader("LOCAL BACKUP", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.save_alt_rounded,
+                          color: const Color(0xFF14B8A6),
+                          title: "Export Local Backup",
+                          subtitle: "Save cards to a file on your device",
+                          isDark: isDark,
+                          onTap: () => _runBackupRestore(
+                            _backupService.offlineBackup,
+                            "Local backup exported successfully",
+                          ),
+                        ),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.folder_open_rounded,
+                          color: const Color(0xFFFF8C00),
+                          title: "Import Local Backup",
+                          subtitle: "Restore cards from a backup file",
+                          isDark: isDark,
+                          onTap: () => _runBackupRestore(
+                            _backupService.offlineRestore,
+                            "Local backup restored successfully",
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── DANGER ZONE ─────────────────────────────────────
+                        _buildDangerHeader(isDark),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withOpacity(isDark ? 0.08 : 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                          ),
+                          child: _buildSettingItem(
+                            context: context,
+                            icon: Icons.delete_forever_rounded,
+                            color: Colors.redAccent,
+                            title: "Wipe Local Data",
+                            subtitle: "Delete all cards from this device",
+                            isDark: isDark,
+                            noBorder: true,
+                            onTap: () async {
+                              bool? confirm = await showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                  title: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text("Confirm Wipe",
+                                          style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  content: Text(
+                                    "This will delete all cards from local storage. Cloud data is safe.",
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        color: isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text("Cancel"),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      child: Text("Wipe Everything",
+                                          style: GoogleFonts.poppins(
+                                              color: Colors.white, fontWeight: FontWeight.w600)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await context.read<CardProvider>().clearAllCards();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Local data cleared")),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── ABOUT ───────────────────────────────────────────
+                        _buildSectionHeader("ABOUT", isDark),
+                        _buildSettingItem(
+                          context: context,
+                          icon: Icons.info_outline_rounded,
+                          color: Colors.blueGrey,
+                          title: "App Version",
+                          subtitle: updateProvider.isUpdateAvailable
+                              ? "Update Available: v${updateProvider.remoteVersion}"
+                              : "v$_appVersion ($_buildNumber)",
+                          isDark: isDark,
+                          trailing: updateProvider.isUpdateAvailable
+                              ? Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.redAccent.withOpacity(0.5),
+                                        blurRadius: 6,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            if (updateProvider.isUpdateAvailable) {
+                              _showUpdateScreen(context);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Checking for updates...")),
+                              );
+                              updateProvider.checkForUpdates();
+                            }
+                          },
+                        ),
+
+                        const SizedBox(height: 100),
                       ],
                     ),
-                  );
-                  if (confirm == true) {
-                    await context.read<CardProvider>().clearAllCards();
-                    if (mounted)
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Local data cleared")),
-                      );
-                  }
-                },
-              ),
+                  ),
+                ),
+              ],
+            ),
 
-              const SizedBox(height: 16),
-              _buildSectionHeader("ABOUT"),
-              _buildSettingItem(
-                context: context,
-                icon: Icons.info_outline_rounded,
-                color: Colors.blueGrey,
-                title: "App Version",
-                subtitle: "v$_appVersion ($_buildNumber)",
-                onTap: () {
-                  if (updateProvider.isUpdateAvailable) {
-                    context.read<UpdateProvider>().checkForUpdates();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Checking for updates...")),
-                    );
-                    updateProvider.checkForUpdates();
-                  }
-                },
-              ),
-              const SizedBox(height: 40),
-            ],
-          ),
-          if (_isProcessing)
-            Container(
-              color: Colors.black87,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(
-                      color: Colors.deepPurpleAccent,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      _processMessage,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+            // ── Loading Overlay ─────────────────────────────────────────
+            if (_isProcessing)
+              ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(
+                    color: Colors.black.withOpacity(0.55),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: const Color(0xFF7C3AED).withOpacity(0.3),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 24,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                valueColor: const AlwaysStoppedAnimation(Color(0xFF7C3AED)),
+                                backgroundColor: const Color(0xFF7C3AED).withOpacity(0.15),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Text(
+                              _processMessage,
+                              style: GoogleFonts.poppins(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, top: 2, left: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 13,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              color: isDark ? Colors.white.withOpacity(0.45) : Colors.black38,
+              fontWeight: FontWeight.w700,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                    Colors.transparent,
                   ],
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildDangerHeader(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 8, top: 4),
-      child: Text(
-        title,
-        style: GoogleFonts.poppins(
-          color: Colors.grey,
-          fontWeight: FontWeight.bold,
-          fontSize: 10,
-          letterSpacing: 1.0,
-        ),
+      padding: const EdgeInsets.only(bottom: 10, top: 2, left: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 13,
+            decoration: BoxDecoration(
+              color: Colors.redAccent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 14),
+          const SizedBox(width: 5),
+          Text(
+            "DANGER ZONE",
+            style: GoogleFonts.poppins(
+              color: Colors.redAccent,
+              fontWeight: FontWeight.w700,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.redAccent.withOpacity(0.2),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -716,53 +1169,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Color color,
     required String title,
     required String subtitle,
+    required bool isDark,
     VoidCallback? onTap,
     Widget? trailing,
+    bool noBorder = false,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.03)
-            : Colors.black.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withOpacity(0.05)
-              : Colors.black.withOpacity(0.05),
-        ),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: Colors.grey, fontSize: 11),
-        ),
-        trailing:
-            trailing ??
-            Icon(
-              Icons.chevron_right_rounded,
-              color: isDark ? Colors.white12 : Colors.black12,
-              size: 20,
+      margin: noBorder ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
+      decoration: noBorder
+          ? null
+          : BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.06),
+              ),
+              boxShadow: isDark
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
             ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: color.withOpacity(0.06),
+          highlightColor: color.withOpacity(0.03),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [color.withOpacity(0.2), color.withOpacity(0.08)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 19),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.poppins(
+                          color: isDark ? Colors.white38 : Colors.black38,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing ??
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: isDark ? Colors.white.withOpacity(0.16) : Colors.black.withOpacity(0.16),
+                      size: 20,
+                    ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
+
+// ── Link Cards Dialog (unchanged logic) ─────────────────────────────────────
 
 class _LinkCardsDialog extends StatefulWidget {
   final List<Map<String, dynamic>> accounts;

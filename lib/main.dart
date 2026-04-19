@@ -113,15 +113,6 @@ class _CardVaultState extends State<CardVault> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final updateProvider = Provider.of<UpdateProvider>(context);
-
-    if (updateProvider.isUpdateAvailable && !updateProvider.isDownloading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (ModalRoute.of(context)?.isCurrent ?? false) {
-          _showUpdateDialog(context, updateProvider);
-        }
-      });
-    }
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -157,28 +148,6 @@ class _CardVaultState extends State<CardVault> {
     );
   }
 
-  void _showUpdateDialog(BuildContext context, UpdateProvider provider) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Update Available 🚀"),
-        content: Text(provider.updateMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Later"),
-          ),
-          ElevatedButton(
-            onPressed: () => provider.startUpdate(() {
-              Navigator.pop(ctx);
-            }),
-            child: const Text("Update Now"),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class LoadingScreen extends StatelessWidget {

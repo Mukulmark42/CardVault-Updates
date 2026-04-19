@@ -21,6 +21,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   late AnimationController _pulseController;
   final TextEditingController _pinController = TextEditingController();
   bool _showPinInput = false;
+  bool _isAuthenticating = false;
 
   @override
   void initState() {
@@ -44,6 +45,8 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _authenticate() async {
+    if (_isAuthenticating) return;
+    
     final security = context.read<SecurityProvider>();
     
     // If biometric is disabled, go straight to PIN if set
@@ -55,6 +58,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     }
 
     try {
+      setState(() => _isAuthenticating = true);
       bool ok = await auth.authenticate(
         localizedReason: "Unlock CardVault",
         options: const AuthenticationOptions(
@@ -77,15 +81,21 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
       if (security.isPinSet) {
         setState(() => _showPinInput = true);
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isAuthenticating = false);
+      }
     }
   }
 
   Future<void> _onUnlockSuccess() async {
     if (!mounted) return;
-    await context.read<CardProvider>().initializeVault();
-    if (!mounted) return;
-    await context.read<ProfileProvider>().refresh();
-    if (!mounted) return;
+    
+    // Start initialization but don't wait for it to finish before navigating
+    // This makes the app feel much faster
+    context.read<CardProvider>().initializeVault();
+    context.read<ProfileProvider>().refresh();
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const MainScreen()),

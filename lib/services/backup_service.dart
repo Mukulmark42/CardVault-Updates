@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database/database_helper.dart';
@@ -10,109 +11,144 @@ import '../models/card_model.dart';
 import '../models/transaction_model.dart';
 import '../models/profile_model.dart';
 
+/// BackupService — simple cloud & offline backup.
+///
+/// DESIGN PRINCIPLE:
+///   • getCards() always returns DECRYPTED (plaintext) card data.
+///   • Firestore stores plaintext card data — device-specific AES keys
+///     must NEVER be used for cloud storage (cross-device restore would fail).
+///   • Local SQLite stores number/CVV encrypted via EncryptionService (device key).
+///   • For true E2EE cloud storage use BackupServiceEnhanced with a user password.
 class BackupService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // --- Online Backup (Firestore) ---
+  // ---------------------------------------------------------------------------
+  // Online Backup (Firestore)
+  // ---------------------------------------------------------------------------
 
   Future<void> onlineBackup() async {
     final user = _auth.currentUser;
-    if (user == null) throw Exception("User not logged in");
+    if (user == null) throw Exception('User not logged in');
 
     final cards = await DatabaseHelper.instance.getCards();
     final transactions = await DatabaseHelper.instance.getTransactions();
     final profiles = await DatabaseHelper.instance.getProfiles();
-    
-    // Batch limit is 500 operations
+
     WriteBatch batch = _firestore.batch();
     int opCount = 0;
 
-    // 1. Clear and Backup Cards
-    final userCardsRef = _firestore.collection('users').doc(user.uid).collection('cards');
+    // Helper to flush batch when approaching the 500-op limit
+    Future<void> maybeFlush() async {
+      if (opCount >= 499) {
+        await batch.commit();
+        batch = _firestore.batch();
+        opCount = 0;
+      }
+    }
+
+    // ── 1. Cards ────────────────────────────────────────────────────────────
+    final userCardsRef =
+        _firestore.collection('users').doc(user.uid).collection('cards');
+
+    // Delete stale cloud docs
     final existingCards = await userCardsRef.get();
-    for (var doc in existingCards.docs) {
+    for (final doc in existingCards.docs) {
       batch.delete(doc.reference);
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    for (var card in cards) {
+    for (final card in cards) {
+      // getCards() returns plaintext (already decrypted from SQLite).
+      // Build the map and strip device-encrypted artefacts that may have
+      // been written by a previous (buggy) version of this service.
+      final cardMap = card.toMap();
+      // Remove any stale enc_version metadata
+      cardMap.remove('enc_version');
+      // Remove any stale _enc fields (left over from buggy backup)
+      cardMap.removeWhere((k, _) => k.endsWith('_enc'));
+
       final docRef = userCardsRef.doc(card.id.toString());
-      batch.set(docRef, card.toMap());
+      batch.set(docRef, cardMap);
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    // 2. Clear and Backup Transactions
-    final userTxsRef = _firestore.collection('users').doc(user.uid).collection('transactions');
+    // ── 2. Transactions ──────────────────────────────────────────────────────
+    final userTxsRef =
+        _firestore.collection('users').doc(user.uid).collection('transactions');
+
     final existingTxs = await userTxsRef.get();
-    for (var doc in existingTxs.docs) {
+    for (final doc in existingTxs.docs) {
       batch.delete(doc.reference);
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    for (var tx in transactions) {
-      // Create a stable ID for Firestore
-      final String txId = "${tx.vendor}_${tx.amount}_${tx.date.millisecondsSinceEpoch}"
-          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final docRef = userTxsRef.doc(txId);
-      batch.set(docRef, tx.toMap());
+    for (final tx in transactions) {
+      // Use a stable, content-derived Firestore ID to avoid duplicates.
+      final txId =
+          '${tx.vendor}_${tx.amount}_${tx.date.millisecondsSinceEpoch}'
+              .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final txMap = tx.toMap()..remove('id'); // ID is local-only
+      batch.set(userTxsRef.doc(txId), txMap);
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    // 3. Clear and Backup Profiles
-    final userProfilesRef = _firestore.collection('users').doc(user.uid).collection('profiles');
+    // ── 3. Profiles ──────────────────────────────────────────────────────────
+    final userProfilesRef =
+        _firestore.collection('users').doc(user.uid).collection('profiles');
+
     final existingProfiles = await userProfilesRef.get();
-    for (var doc in existingProfiles.docs) {
+    for (final doc in existingProfiles.docs) {
       batch.delete(doc.reference);
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    for (var profile in profiles) {
+    for (final profile in profiles) {
       final docRef = userProfilesRef.doc(profile.id.toString());
-      batch.set(docRef, profile.toMap());
+      batch.set(docRef, profile.toMap()..remove('id'));
       opCount++;
-      if (opCount >= 500) { await batch.commit(); batch = _firestore.batch(); opCount = 0; }
+      await maybeFlush();
     }
 
-    if (opCount > 0) {
-      await batch.commit();
-    }
+    if (opCount > 0) await batch.commit();
   }
+
+  // ---------------------------------------------------------------------------
+  // Online Restore (Firestore → local SQLite)
+  // ---------------------------------------------------------------------------
 
   Future<void> onlineRestore() async {
     final user = _auth.currentUser;
-    if (user == null) throw Exception("User not logged in");
+    if (user == null) throw Exception('User not logged in');
 
-    // 0. Restore Profiles
+    // ── 0. Profiles ──────────────────────────────────────────────────────────
     final profileSnapshot = await _firestore
         .collection('users')
         .doc(user.uid)
         .collection('profiles')
         .get();
 
-    Map<int, int> profileIdMapping = {};
+    final Map<int, int> profileIdMapping = {};
     if (profileSnapshot.docs.isNotEmpty) {
       await DatabaseHelper.instance.clearAllProfiles();
-      for (var doc in profileSnapshot.docs) {
-        final profileData = doc.data();
-        final oldId = profileData['id'] as int?;
-        
-        final profile = ProfileModel.fromMap(profileData);
+      for (final doc in profileSnapshot.docs) {
+        final data = Map<String, dynamic>.from(doc.data());
+        final oldId = data['id'] as int?;
+        data.remove('id'); // let SQLite assign a new local ID
+
+        final profile = ProfileModel.fromMap(data);
         profile.id = null;
-        
-        int newId = await DatabaseHelper.instance.insertProfile(profile);
-        if (oldId != null) {
-          profileIdMapping[oldId] = newId;
-        }
+        final newId = await DatabaseHelper.instance.insertProfile(profile);
+        if (oldId != null) profileIdMapping[oldId] = newId;
       }
     }
 
-    // 1. Restore Cards
+    // ── 1. Cards ────────────────────────────────────────────────────────────
     final cardSnapshot = await _firestore
         .collection('users')
         .doc(user.uid)
@@ -121,117 +157,134 @@ class BackupService {
 
     if (cardSnapshot.docs.isEmpty) return;
 
-    // Clear local data before restore
     await DatabaseHelper.instance.clearAllCards();
-    
-    Map<int, int> idMapping = {};
+    final Map<int, int> idMapping = {};
 
-    for (var doc in cardSnapshot.docs) {
-      final cardData = doc.data();
-      final oldId = cardData['id'] as int?;
-      
-      final card = CardModel.fromMap(cardData);
-      card.id = null; // Reset to let SQLite auto-increment
-      
-      // Update profileId if we mapped it to a new local ID
-      if (card.profileId != null && profileIdMapping.containsKey(card.profileId)) {
+    for (final doc in cardSnapshot.docs) {
+      final rawData = Map<String, dynamic>.from(doc.data());
+      final oldId = rawData['id'] as int?;
+
+      // ── Sanitise stale enc_version data written by the buggy backup ──
+      // If a previous (broken) version stored `number_enc` instead of `number`,
+      // try to recover the plaintext. If decryption fails (different device key
+      // or corrupted data), fall back to an empty string so the card is still
+      // usable — the user can edit it to add the correct value.
+      rawData.remove('enc_version');
+      const sensitiveFields = [
+        'number', 'cvv', 'holder', 'expiry', 'bank', 'variant'
+      ];
+      for (final field in sensitiveFields) {
+        final encKey = '${field}_enc';
+        if (!rawData.containsKey(field) && rawData.containsKey(encKey)) {
+          // Attempt to decrypt with the local key (works if same device).
+          final encrypted = rawData[encKey] as String? ?? '';
+          final decrypted =
+              await DatabaseHelper.instance.tryDecryptField(encrypted);
+          // If decryption succeeded, use it; otherwise fall back to empty.
+          rawData[field] = decrypted ?? '';
+          debugPrint(
+              '[Restore] field=$field recovered=${decrypted != null}');
+        }
+        rawData.remove('${field}_enc');
+      }
+
+      final card = CardModel.fromMap(rawData);
+      card.id = null; // let SQLite AUTOINCREMENT assign a new ID
+
+      // Re-map profile ID to the new local ID after profile restore
+      if (card.profileId != null &&
+          profileIdMapping.containsKey(card.profileId)) {
         card.profileId = profileIdMapping[card.profileId];
       }
-      
-      int newId = await DatabaseHelper.instance.insertCard(card);
-      if (oldId != null) {
-        idMapping[oldId] = newId;
-      }
+
+      final newId = await DatabaseHelper.instance.insertCard(card);
+      if (oldId != null) idMapping[oldId] = newId;
     }
 
-    // 2. Restore Transactions
+    // ── 2. Transactions ──────────────────────────────────────────────────────
     final txSnapshot = await _firestore
         .collection('users')
         .doc(user.uid)
         .collection('transactions')
         .get();
-    
-    for (var doc in txSnapshot.docs) {
-      final txData = doc.data();
-      final tx = TransactionModel.fromMap(txData);
-      
-      // Map old card ID to new card ID on this device
+
+    for (final doc in txSnapshot.docs) {
+      final tx = TransactionModel.fromMap(doc.data());
       if (idMapping.containsKey(tx.cardId)) {
         tx.cardId = idMapping[tx.cardId]!;
-        
-        // We use a raw insert to avoid the "spent" amount incrementing twice
-        // because the CardModel already came with the correct "spent" value.
-        await _insertTransactionRaw(tx);
+        // Raw insert: card.spent already contains the correct total.
+        // ConflictAlgorithm.ignore silently skips duplicates.
+        await DatabaseHelper.instance.insertTransactionRaw(tx);
       }
     }
   }
-  
-  /// Helper to insert transaction without affecting card spent amount (used during restore)
-  Future<void> _insertTransactionRaw(TransactionModel tx) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('transactions', tx.toMap());
-  }
 
-  // --- Offline Backup (Local File) ---
+  // ---------------------------------------------------------------------------
+  // Offline Backup (JSON file export)
+  // ---------------------------------------------------------------------------
 
   Future<void> offlineBackup() async {
     final cards = await DatabaseHelper.instance.getCards();
     final transactions = await DatabaseHelper.instance.getTransactions();
-    
+
     final jsonData = jsonEncode({
-      'cards': cards.map((e) => e.toMap()).toList(),
-      'transactions': transactions.map((e) => e.toMap()).toList(),
+      'backup_version': 2,
+      'timestamp': DateTime.now().toIso8601String(),
+      'cards': cards.map((c) {
+        final m = c.toMap();
+        m.remove('id'); // local ID is meaningless on another device
+        return m;
+      }).toList(),
+      'transactions': transactions.map((t) {
+        final m = t.toMap();
+        m.remove('id');
+        return m;
+      }).toList(),
     });
-    
+
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/cardvault_backup.json');
     await file.writeAsString(jsonData);
-
     await Share.shareXFiles([XFile(file.path)], text: 'CardVault Backup');
   }
 
+  // ---------------------------------------------------------------------------
+  // Offline Restore (JSON file import)
+  // ---------------------------------------------------------------------------
+
   Future<void> offlineRestore() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
+    if (result == null) return;
 
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      String content = await file.readAsString();
-      dynamic decoded = jsonDecode(content);
+    final file = File(result.files.single.path!);
+    final content = await file.readAsString();
+    final dynamic decoded = jsonDecode(content);
+    if (decoded is! Map) return;
 
-      await DatabaseHelper.instance.clearAllCards();
-      Map<int, int> idMapping = {};
+    await DatabaseHelper.instance.clearAllCards();
+    final Map<int, int> idMapping = {};
 
-      if (decoded is List) {
-        // Legacy format: just cards
-        for (var item in decoded) {
-          await DatabaseHelper.instance.insertCard(CardModel.fromMap(item));
-        }
-      } else if (decoded is Map) {
-        // New format: cards and transactions
-        if (decoded.containsKey('cards')) {
-          List<dynamic> cardList = decoded['cards'];
-          for (var item in cardList) {
-            final cardData = Map<String, dynamic>.from(item);
-            final oldId = cardData['id'] as int?;
-            final card = CardModel.fromMap(cardData);
-            card.id = null;
-            int newId = await DatabaseHelper.instance.insertCard(card);
-            if (oldId != null) idMapping[oldId] = newId;
-          }
-        }
+    if (decoded.containsKey('cards')) {
+      for (final item in decoded['cards'] as List<dynamic>) {
+        final cardData = Map<String, dynamic>.from(item as Map);
+        final oldId = cardData['id'] as int?;
+        cardData.remove('id');
+        final card = CardModel.fromMap(cardData);
+        card.id = null;
+        final newId = await DatabaseHelper.instance.insertCard(card);
+        if (oldId != null) idMapping[oldId] = newId;
+      }
+    }
 
-        if (decoded.containsKey('transactions')) {
-          List<dynamic> txList = decoded['transactions'];
-          for (var item in txList) {
-            final tx = TransactionModel.fromMap(Map<String, dynamic>.from(item));
-            if (idMapping.containsKey(tx.cardId)) {
-              tx.cardId = idMapping[tx.cardId]!;
-              await _insertTransactionRaw(tx);
-            }
-          }
+    if (decoded.containsKey('transactions')) {
+      for (final item in decoded['transactions'] as List<dynamic>) {
+        final tx = TransactionModel.fromMap(Map<String, dynamic>.from(item as Map));
+        if (idMapping.containsKey(tx.cardId)) {
+          tx.cardId = idMapping[tx.cardId]!;
+          await DatabaseHelper.instance.insertTransactionRaw(tx);
         }
       }
     }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/card_model.dart';
@@ -150,7 +151,11 @@ class DatabaseHelper {
     if (profile.isDefault) {
       await db.update('profiles', {'is_default': 0});
     }
-    return await db.insert('profiles', profile.toMap()..remove('id'));
+    return await db.insert(
+      'profiles',
+      profile.toMap()..remove('id'),
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   Future<List<ProfileModel>> getProfiles() async {
@@ -239,10 +244,11 @@ class DatabaseHelper {
     final encryptedCvv = await EncryptionService.instance.encryptData(card.cvv);
 
     final map = card.toMap();
+    map.remove('id'); // Always let SQLite AUTOINCREMENT assign the ID
     map['number'] = encryptedNumber;
     map['cvv'] = encryptedCvv;
 
-    return await db.insert('cards', map);
+    return await db.insert('cards', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<CardModel>> getCards() async {
@@ -252,13 +258,42 @@ class DatabaseHelper {
     return await Future.wait(result.map((map) async {
       final mutableMap = Map<String, dynamic>.from(map);
       try {
-        final decryptedNumber = await EncryptionService.instance.decryptData(map['number'] as String);
-        final decryptedCvv = await EncryptionService.instance.decryptData(map['cvv'] as String);
-        mutableMap['number'] = decryptedNumber;
-        mutableMap['cvv'] = decryptedCvv;
-      } catch (e) {}
+        final rawNumber = map['number'] as String? ?? '';
+        final rawCvv    = map['cvv']    as String? ?? '';
+
+        // Attempt decryption. decryptData() returns '[Decryption Error]' on
+        // failure — if that happens we fall back to the raw stored value so
+        // the UI never shows the error string.
+        final decryptedNumber =
+            await EncryptionService.instance.decryptData(rawNumber);
+        final decryptedCvv =
+            await EncryptionService.instance.decryptData(rawCvv);
+
+        mutableMap['number'] =
+            decryptedNumber.startsWith('[Decryption') ? rawNumber : decryptedNumber;
+        mutableMap['cvv'] =
+            decryptedCvv.startsWith('[Decryption') ? rawCvv : decryptedCvv;
+      } catch (e) {
+        debugPrint('getCards decrypt error: $e');
+        // Leave mutableMap with the original (possibly encrypted) values
+        // rather than crashing or showing an error string.
+      }
       return CardModel.fromMap(mutableMap);
     }));
+  }
+
+  /// Attempts to decrypt [value] using the local EncryptionService key.
+  /// Returns the plaintext string on success, or `null` if decryption fails
+  /// (e.g. the value was encrypted with a different device's key).
+  Future<String?> tryDecryptField(String value) async {
+    if (value.isEmpty) return value;
+    try {
+      final result = await EncryptionService.instance.decryptData(value);
+      if (result.startsWith('[Decryption')) return null;
+      return result;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<int> updateCard(CardModel card) async {
@@ -301,10 +336,11 @@ class DatabaseHelper {
     
     if (existing.isNotEmpty) return -1;
 
-    final id = await db.insert('transactions', tx.toMap());
+    final map = tx.toMap()..remove('id'); // Let SQLite auto-assign the ID
+    final id = await db.insert('transactions', map, conflictAlgorithm: ConflictAlgorithm.ignore);
     
     // Update card spent amount
-    if (id != -1) {
+    if (id != -1 && id != 0) {
       await db.rawUpdate(
         'UPDATE cards SET spent = spent + ? WHERE id = ?',
         [tx.amount, tx.cardId]
@@ -312,6 +348,19 @@ class DatabaseHelper {
     }
     
     return id;
+  }
+
+  /// Insert a transaction without affecting card spent amount.
+  /// Used during backup restore (card already has correct spent value).
+  /// Silently ignores duplicates via ConflictAlgorithm.ignore.
+  Future<void> insertTransactionRaw(TransactionModel tx) async {
+    final db = await database;
+    final map = tx.toMap()..remove('id'); // Always auto-generate the ID
+    await db.insert(
+      'transactions',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   Future<List<TransactionModel>> getTransactions({int? cardId}) async {
