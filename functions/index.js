@@ -58,7 +58,8 @@ exports.sendBillReminder = onRequest(async (req, res) => {
   try {
     const db = admin.firestore();
 
-    const amount = req.body.amount || "0";
+    const amountRaw = req.body.amount;
+    const amount = parseFloat(amountRaw) || 0;
     const dueDate = req.body.dueDate || "N/A";
     const bank = req.body.bank || "Bank";
 
@@ -70,6 +71,13 @@ exports.sendBillReminder = onRequest(async (req, res) => {
       return res.status(200).send("No users found");
     }
 
+    // Build a smart body: mention amount if known, otherwise ask user to check
+    const title = `💳 ${bank} Bill Due`;
+    const body =
+      amount > 0 ?
+        `Your bill of ₹${Math.round(amount)} is due on ${dueDate}. Pay on time to avoid charges.` :
+        `Your bill due date is ${dueDate}. Please check your due amount.`;
+
     let sentCount = 0;
     for (const doc of usersSnapshot.docs) {
       const data = doc.data();
@@ -80,9 +88,11 @@ exports.sendBillReminder = onRequest(async (req, res) => {
         continue;
       }
 
-      const title = `💳 ${bank} Bill Due`;
-      const body = `Your bill of ₹${amount} is due on ${dueDate}.`;
-      const sent = await sendFcm(token, title, body, { bank, amount, dueDate });
+      const sent = await sendFcm(token, title, body, {
+        bank,
+        amount: String(amount),
+        dueDate,
+      });
       if (sent) sentCount++;
 
       // Small delay to avoid quota issues
@@ -107,8 +117,8 @@ exports.dailyBillChecker = onSchedule("0 9 * * *", async () => {
   const db = admin.firestore();
   const now = new Date();
 
-  // Check bills due in 0, 1, or 3 days from now (T-day, T-1, T-3)
-  const warningThresholds = [0, 1, 3];
+  // Send reminders at 3, 2, 1 day(s) before due date AND on the due date itself
+  const warningThresholds = [0, 1, 2, 3];
 
   try {
     const usersSnapshot = await db.collection("users").get();
@@ -145,6 +155,7 @@ exports.dailyBillChecker = onSchedule("0 9 * * *", async () => {
       for (const cardDoc of cardsSnapshot.docs) {
         const card = cardDoc.data();
 
+        // Skip only if already paid — always remind even when spent is 0
         if (!card.due_date || card.is_paid === 1) continue;
 
         let dueDate;
@@ -156,36 +167,61 @@ exports.dailyBillChecker = onSchedule("0 9 * * *", async () => {
 
         if (isNaN(dueDate.getTime())) continue;
 
-        // Calculate days until due
+        // Normalise both dates to midnight UTC for accurate day comparison
+        const nowMidnight = new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+        );
+        const dueMidnight = new Date(
+          Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate())
+        );
+
         const msPerDay = 1000 * 60 * 60 * 24;
-        const daysUntilDue = Math.ceil((dueDate - now) / msPerDay);
+        const daysUntilDue = Math.round((dueMidnight - nowMidnight) / msPerDay);
 
         if (!warningThresholds.includes(daysUntilDue)) continue;
 
         const bank = card.bank || "Your card";
-        const spent = card.spent ? `₹${Math.round(card.spent)}` : "outstanding";
+        const spentAmount = parseFloat(card.spent) || 0;
         const dueDateStr = dueDate.toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
           year: "numeric",
         });
 
-        let urgency = "";
+        // ── Urgency label ──
+        let urgency;
         if (daysUntilDue === 0) urgency = "❗ DUE TODAY";
         else if (daysUntilDue === 1) urgency = "⚠️ Due TOMORROW";
-        else urgency = "📅 Due in 3 days";
+        else urgency = `📅 Due in ${daysUntilDue} days`;
 
-        const title = `${bank} Bill Due ${urgency}`;
-        const body = `${spent} due on ${dueDateStr}. Pay on time to avoid charges.`;
+        const title = `💳 ${bank} Bill ${urgency}`;
+
+        // ── Smart body: mention amount if known, otherwise prompt user to check ──
+        let body;
+        if (spentAmount > 0) {
+          body = `₹${Math.round(spentAmount)} is due on ${dueDateStr}. Pay on time to avoid late charges.`;
+        } else {
+          // Amount unknown — still remind so user doesn't miss the due date
+          if (daysUntilDue === 0) {
+            body = `Your bill due date is TODAY (${dueDateStr}). Please check your due amount.`;
+          } else if (daysUntilDue === 1) {
+            body = `Your bill due date is TOMORROW (${dueDateStr}). Please check your due amount.`;
+          } else {
+            body = `Your bill due date is on ${dueDateStr} (in ${daysUntilDue} days). Please check your due amount.`;
+          }
+        }
 
         await sendFcm(fcmToken, title, body, {
           bank,
-          amount: String(card.spent || 0),
+          amount: String(spentAmount),
           dueDate: card.due_date,
           type: "bill_reminder",
+          daysUntilDue: String(daysUntilDue),
         });
 
-        console.log(`📨 Reminder sent to user ${uid} for ${bank} — ${daysUntilDue} day(s) away`);
+        console.log(
+          `📨 Reminder sent to user ${uid} for ${bank} — ${daysUntilDue} day(s) away | amount: ${spentAmount}`
+        );
 
         // Delay between notifications to be kind to Firebase quota
         await delay(200);

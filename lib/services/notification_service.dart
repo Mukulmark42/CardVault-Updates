@@ -189,16 +189,22 @@ class NotificationService {
     double amount,
     String? dueDate,
   ) async {
-    // Skip noisy/incomplete notifications — must have a real amount OR a due date
+    // Skip only when there is no amount AND no due date — if either is present, notify the user
     if (amount <= 0 && dueDate == null) {
       debugPrint('⏭️ Skipping bill notification — no amount and no due date');
       return;
     }
     try {
-      final formattedAmount = amount > 0 ? '₹${amount.toStringAsFixed(0)}' : 'Amount pending';
-      final body = dueDate != null
-          ? '$formattedAmount due on $dueDate'
-          : '$formattedAmount bill detected';
+      // Build a smart body based on what we know
+      final String body;
+      if (amount > 0 && dueDate != null) {
+        body = '₹${amount.toStringAsFixed(0)} is due on $dueDate.';
+      } else if (amount > 0) {
+        body = '₹${amount.toStringAsFixed(0)} bill detected. Check your due date.';
+      } else {
+        // amount is 0 but dueDate is known — prompt user to check
+        body = 'Your bill due date is $dueDate. Please check your due amount.';
+      }
 
       await _notificationsPlugin.show(
         // Unique ID based on bank name hash to avoid duplicates across re-syncs
