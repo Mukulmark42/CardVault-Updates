@@ -25,17 +25,18 @@ class MainActivity : FlutterFragmentActivity() {
         private const val EVENT_CHANNEL  = "com.cardvault/ota_progress"
     }
 
-    // ── State ───────────────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────────────
     private var downloadId: Long = -1L
     private var progressSink: EventChannel.EventSink? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var progressRunnable: Runnable? = null
     private var downloadReceiver: BroadcastReceiver? = null
+    private var installTriggered = false  // guard: only install once
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // ── EventChannel: streams progress to Flutter ────────────────────────
+        // ── EventChannel: streams progress to Flutter ────────────────────────────
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
@@ -46,7 +47,7 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             })
 
-        // ── MethodChannel: start / cancel download ───────────────────────────
+        // ── MethodChannel: start / cancel download ───────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -67,20 +68,18 @@ class MainActivity : FlutterFragmentActivity() {
             }
     }
 
-    // ── Download via DownloadManager (survives screen-off) ───────────────────
+    // ── Download via DownloadManager (survives screen-off) ───────────────────────
     private fun startDownload(url: String) {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
 
-        // Cancel any previous in-progress download
+        // Cancel any in-progress download
         if (downloadId != -1L) {
             dm.remove(downloadId)
             stopProgressPolling()
         }
+        installTriggered = false
 
-        val destFile = File(
-            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "cardvault-update.apk"
-        )
+        val destFile = getDestFile()
         if (destFile.exists()) destFile.delete()
 
         val request = DownloadManager.Request(Uri.parse(url)).apply {
@@ -96,18 +95,19 @@ class MainActivity : FlutterFragmentActivity() {
 
         downloadId = dm.enqueue(request)
 
-        // Register completion receiver
+        // ── Broadcast receiver: fires when DownloadManager finishes ──────────────
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (id == downloadId) {
                     stopProgressPolling()
-                    checkAndInstall(dm, destFile)
-                    unregisterReceiver(this)
+                    triggerInstallIfReady(dm, destFile)
+                    try { unregisterReceiver(this) } catch (_: Exception) {}
                     downloadReceiver = null
                 }
             }
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(
                 receiver,
@@ -116,24 +116,38 @@ class MainActivity : FlutterFragmentActivity() {
             )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(
-                receiver,
-                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-            )
+            registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
         }
         downloadReceiver = receiver
 
-        // Poll progress every 500 ms
-        startProgressPolling(dm)
+        // ── Polling: updates Flutter progress bar every 500 ms ───────────────────
+        startProgressPolling(dm, destFile)
     }
 
-    private fun startProgressPolling(dm: DownloadManager) {
+    // ── Progress polling ─────────────────────────────────────────────────────────
+    private fun startProgressPolling(dm: DownloadManager, destFile: File) {
         val runnable = object : Runnable {
             override fun run() {
-                val progress = queryProgress(dm)
-                mainHandler.post { progressSink?.success(progress) }
-                if (progress["status"] == "downloading") {
-                    mainHandler.postDelayed(this, 500)
+                val info = queryProgress(dm)
+                val status = info["status"] as String
+
+                mainHandler.post { progressSink?.success(info) }
+
+                when (status) {
+                    "downloading", "pending", "paused" -> {
+                        // Keep polling
+                        mainHandler.postDelayed(this, 500)
+                    }
+                    "done" -> {
+                        // Download finished — trigger install
+                        triggerInstallIfReady(dm, destFile)
+                    }
+                    "error" -> {
+                        mainHandler.post {
+                            progressSink?.success(mapOf("status" to "error", "percent" to 0.0))
+                        }
+                    }
+                    // else: unknown / already handled
                 }
             }
         }
@@ -163,54 +177,85 @@ class MainActivity : FlutterFragmentActivity() {
 
             val percent = if (bytesTotal > 0) (bytesDownloaded * 100.0 / bytesTotal) else 0.0
             val status = when (statusCode) {
-                DownloadManager.STATUS_RUNNING  -> "downloading"
-                DownloadManager.STATUS_PAUSED   -> "paused"
-                DownloadManager.STATUS_PENDING  -> "pending"
+                DownloadManager.STATUS_RUNNING    -> "downloading"
+                DownloadManager.STATUS_PAUSED     -> "paused"
+                DownloadManager.STATUS_PENDING    -> "pending"
                 DownloadManager.STATUS_SUCCESSFUL -> "done"
-                DownloadManager.STATUS_FAILED   -> "error"
-                else -> "unknown"
+                DownloadManager.STATUS_FAILED     -> "error"
+                else                              -> "unknown"
             }
-            mapOf("status" to status, "percent" to percent, "downloaded" to bytesDownloaded, "total" to bytesTotal)
+            mapOf(
+                "status"     to status,
+                "percent"    to percent,
+                "downloaded" to bytesDownloaded,
+                "total"      to bytesTotal
+            )
         } else {
             cursor.close()
             mapOf("status" to "error", "percent" to 0.0)
         }
     }
 
-    private fun checkAndInstall(dm: DownloadManager, destFile: File) {
+    // ── Auto-install: called from both the receiver AND the polling loop ─────────
+    @Synchronized
+    private fun triggerInstallIfReady(dm: DownloadManager, destFile: File) {
+        if (installTriggered) return   // Only install once
+
+        // Verify DownloadManager reports success
         val query = DownloadManager.Query().setFilterById(downloadId)
         val cursor = dm.query(query)
         var success = false
         if (cursor.moveToFirst()) {
-            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            val status = cursor.getInt(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+            )
             success = (status == DownloadManager.STATUS_SUCCESSFUL)
         }
         cursor.close()
 
-        mainHandler.post {
-            if (success && destFile.exists()) {
+        if (success && destFile.exists() && destFile.length() > 0) {
+            installTriggered = true
+            mainHandler.post {
+                // Notify Flutter: 100% + installing status
                 progressSink?.success(mapOf("status" to "installing", "percent" to 100.0))
-                installApk(destFile)
-            } else {
+                // Small delay so Flutter UI can update before the installer takes over
+                mainHandler.postDelayed({ installApk(destFile) }, 500)
+            }
+        } else if (!success) {
+            mainHandler.post {
                 progressSink?.success(mapOf("status" to "error", "percent" to 0.0))
             }
         }
     }
 
+    // ── Launch system APK installer ──────────────────────────────────────────────
     private fun installApk(file: File) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
+        try {
             val uri = FileProvider.getUriForFile(
-                this@MainActivity,
+                this,
                 "${packageName}.ota_update_provider",
                 file
             )
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: tell Flutter something went wrong
+            progressSink?.success(mapOf("status" to "error", "percent" to 0.0))
         }
-        startActivity(intent)
     }
 
+    private fun getDestFile(): File =
+        File(
+            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            "cardvault-update.apk"
+        )
+
+    // ── Cancel download ──────────────────────────────────────────────────────────
     private fun cancelDownload() {
         stopProgressPolling()
         if (downloadId != -1L) {
@@ -222,6 +267,7 @@ class MainActivity : FlutterFragmentActivity() {
             try { unregisterReceiver(it) } catch (_: Exception) {}
             downloadReceiver = null
         }
+        installTriggered = false
     }
 
     override fun onDestroy() {
