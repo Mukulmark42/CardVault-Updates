@@ -446,14 +446,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: updateProvider.downloadProgress / 100,
                             minHeight: 8,
                             backgroundColor: Colors.white10,
-                            color: const Color(0xFF7C3AED),
+                            color: updateProvider.downloadStatus == 'paused'
+                                ? Colors.orange
+                                : const Color(0xFF7C3AED),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Downloading: ${updateProvider.downloadProgress.toStringAsFixed(1)}%',
+                          updateProvider.downloadStatus == 'paused'
+                              ? '⏸ Paused — ${updateProvider.downloadProgress.toStringAsFixed(1)}% (screen-off safe, resuming…)'
+                              : updateProvider.downloadStatus == 'pending'
+                                  ? '⏳ Starting download…'
+                                  : 'Downloading: ${updateProvider.downloadProgress.toStringAsFixed(1)}%',
                           style: const TextStyle(
                               fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Download continues even if screen turns off',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withOpacity(0.4)),
                         ),
                       ],
                     ),
@@ -488,6 +501,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: () => Navigator.pop(ctx),
                   child: Text("Later", style: GoogleFonts.poppins(color: Colors.white54)),
                 ),
+              if (updateProvider.isDownloading)
+                TextButton(
+                  onPressed: () {
+                    updateProvider.cancelUpdate();
+                    Navigator.pop(ctx);
+                  },
+                  child: Text("Cancel",
+                      style: GoogleFonts.poppins(color: Colors.redAccent)),
+                ),
               ElevatedButton(
                 onPressed: updateProvider.isDownloading
                     ? null
@@ -500,8 +522,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: Text(
                   updateProvider.isDownloading
-                      ? "Downloading..."
-                      : (updateProvider.hasError ? "Retry" : "Update Now"),
+                      ? 'Downloading…'
+                      : (updateProvider.hasError ? 'Retry' : 'Update Now'),
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
               ),
